@@ -62,6 +62,7 @@ import {
 import { conflict, HttpError, notFound, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { parseObject } from "../adapters/utils.js";
+import { detectLikelyTextEncodingCorruption } from "../lib/text-encoding.js";
 import {
   defaultIssueExecutionWorkspaceSettingsForProject,
   gateProjectExecutionWorkspacePolicy,
@@ -424,6 +425,28 @@ function escapeLikePattern(value: string): string {
 
 export function clampIssueListLimit(limit: number): number {
   return Math.min(ISSUE_LIST_MAX_LIMIT, Math.max(1, Math.floor(limit)));
+}
+
+function assertTextNotEncodingCorrupted(field: string, value: unknown) {
+  const corruption = detectLikelyTextEncodingCorruption(value);
+  if (!corruption) return;
+  logger.warn({ field, corruption }, "rejected likely encoding-corrupted issue text");
+  throw unprocessable(
+    `${field} appears to be encoding-corrupted. Send JSON as UTF-8 and set Content-Type to application/json; charset=utf-8.`,
+    { field, corruption },
+  );
+}
+
+function assertIssueTextNotEncodingCorrupted(data: {
+  title?: unknown;
+  description?: unknown;
+  body?: unknown;
+  comment?: unknown;
+}) {
+  assertTextNotEncodingCorrupted("title", data.title);
+  assertTextNotEncodingCorrupted("description", data.description);
+  assertTextNotEncodingCorrupted("body", data.body);
+  assertTextNotEncodingCorrupted("comment", data.comment);
 }
 
 function chunkList<T>(values: T[], size: number): T[][] {
@@ -5007,6 +5030,10 @@ export function issueService(db: Db) {
       companyId: string,
       data: IssueCreateInput,
     ) => {
+      assertIssueTextNotEncodingCorrupted({
+        title: data.title,
+        description: data.description,
+      });
       const {
         labelIds: inputLabelIds,
         blockedByIssueIds,
@@ -5238,6 +5265,10 @@ export function issueService(db: Db) {
       },
       dbOrTx: any = db,
     ) => {
+      assertIssueTextNotEncodingCorrupted({
+        title: data.title,
+        description: data.description,
+      });
       const existing = await dbOrTx
         .select()
         .from(issues)
@@ -6185,6 +6216,7 @@ export function issueService(db: Db) {
       },
       dbOrTx: any = db,
     ) => {
+      assertIssueTextNotEncodingCorrupted({ body });
       const issue = await dbOrTx
         .select({ companyId: issues.companyId })
         .from(issues)

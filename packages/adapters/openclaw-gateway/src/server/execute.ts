@@ -417,6 +417,7 @@ function buildWakeText(
     "HTTP rules:",
     "- Use Authorization: Bearer $PAPERCLIP_API_KEY on every API call.",
     "- Use X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID on every mutating API call.",
+    "- Send JSON request bodies as UTF-8 and set Content-Type: application/json; charset=utf-8. On Windows PowerShell 5.1, do not send non-ASCII JSON with inline strings; write UTF-8 JSON bytes or use curl/node/pwsh so Chinese and other Unicode text is preserved.",
     "- Use only /api endpoints listed below.",
     "- Do NOT call guessed endpoints like /api/cloud-adapter/*, /api/cloud-adapters/*, /api/adapters/cloud/*, or /api/heartbeat.",
     "",

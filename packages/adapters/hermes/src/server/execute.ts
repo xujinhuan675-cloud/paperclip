@@ -93,6 +93,7 @@ const HERMES_DEFAULT_PROMPT_TEMPLATE = [
   "- Displayed command logs may redact secrets; rely on environment variables instead of printed token values.",
   "- Include `-H \"Authorization: Bearer $PAPERCLIP_API_KEY\"` on API requests.",
   "- Include `-H \"X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID\"` on mutating issue requests.",
+  "- Send JSON request bodies as UTF-8 and set `Content-Type: application/json; charset=utf-8`; on Windows PowerShell 5.1, do not send non-ASCII JSON with inline strings.",
   "- For multiline comments or status updates, preserve newlines with `jq --arg` or a heredoc-fed helper rather than hand-escaping JSON.",
   "",
   "Safe multiline update pattern:",
