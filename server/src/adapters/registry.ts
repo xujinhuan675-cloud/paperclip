@@ -482,6 +482,7 @@ const hermesLocalAdapter: ServerAdapterModule = {
       "Paperclip API safety rule:",
       "Use Authorization: Bearer $PAPERCLIP_API_KEY on every Paperclip API request.",
       "Use X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID on every Paperclip API request that writes or mutates data, including comments and issue updates.",
+      "Send JSON request bodies as UTF-8 and set Content-Type: application/json; charset=utf-8. On Windows PowerShell 5.1, do not send non-ASCII JSON with inline strings; write UTF-8 JSON bytes or use curl/node/pwsh so Chinese and other Unicode text is preserved.",
       "Never use a board, browser, or local-board session for Paperclip API writes.",
     ].join("\n");
 

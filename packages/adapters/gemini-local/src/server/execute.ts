@@ -112,6 +112,7 @@ function renderApiAccessNote(env: Record<string, string>): string {
   return [
     "Paperclip API access note:",
     "Use run_shell_command with curl to make Paperclip API requests.",
+    "Send JSON request bodies as UTF-8 and set Content-Type: application/json; charset=utf-8. On Windows PowerShell 5.1, do not send non-ASCII JSON with inline strings; write UTF-8 JSON bytes or use curl/node/pwsh so Chinese and other Unicode text is preserved.",
     "GET example:",
     `  run_shell_command({ command: "curl -s -H \\"Authorization: Bearer $PAPERCLIP_API_KEY\\" \\"$PAPERCLIP_API_URL/api/agents/me\\"" })`,
     "POST/PATCH example:",
