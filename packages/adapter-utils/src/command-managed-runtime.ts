@@ -5,6 +5,8 @@ import {
   type SandboxManagedRuntimeAsset,
   type SandboxManagedRuntimeClient,
   type SandboxRemoteExecutionSpec,
+  type SandboxSyncOperation,
+  type SandboxSyncResult,
 } from "./sandbox-managed-runtime.js";
 import { preferredShellForSandbox, shellCommandArgs } from "./sandbox-shell.js";
 import type { RunProcessResult } from "./server-utils.js";
@@ -28,6 +30,16 @@ export interface CommandManagedRuntimeRunner {
     onLog?: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
     onSpawn?: (meta: { pid: number; startedAt: string }) => Promise<void>;
   }): Promise<RunProcessResult>;
+  /**
+   * Optional native inbound file transfer. Present only when the sandbox
+   * provider advertises both `environmentSyncIn` and `environmentSyncOut`; the
+   * client exposes `syncIn`/`syncOut` only when BOTH are present, so the
+   * orchestrator either uses the native path for both directions or falls back
+   * to the base64 transport for both.
+   */
+  syncIn?(operations: SandboxSyncOperation[]): Promise<SandboxSyncResult>;
+  /** Optional native outbound file transfer. See {@link syncIn}. */
+  syncOut?(operations: SandboxSyncOperation[]): Promise<SandboxSyncResult>;
 }
 
 export interface CommandManagedRuntimeSpec {
@@ -69,10 +81,25 @@ function toBuffer(bytes: Buffer | Uint8Array | ArrayBuffer): Buffer {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
+const FAILED_COMMAND_OUTPUT_TAIL_CHARS = 4_000;
+
+function formatFailedCommandOutput(result: RunProcessResult): string {
+  const tail = (text: string): string => {
+    const trimmed = text.trim();
+    if (trimmed.length <= FAILED_COMMAND_OUTPUT_TAIL_CHARS) return trimmed;
+    return `...[truncated]\n${trimmed.slice(-FAILED_COMMAND_OUTPUT_TAIL_CHARS)}`;
+  };
+  const stderr = tail(result.stderr);
+  const stdout = tail(result.stdout);
+  const parts: string[] = [];
+  if (stderr.length > 0) parts.push(`stderr: ${stderr}`);
+  if (stdout.length > 0) parts.push(`stdout: ${stdout}`);
+  return parts.length > 0 ? `:\n${parts.join("\n")}` : "";
+}
+
 function requireSuccessfulResult(result: RunProcessResult, action: string): void {
   if (result.exitCode === 0 && !result.timedOut) return;
-  const stderr = result.stderr.trim();
-  const detail = stderr.length > 0 ? `: ${stderr}` : "";
+  const detail = formatFailedCommandOutput(result);
   throw new Error(`${action} failed with exit code ${result.exitCode ?? "null"}${detail}`);
 }
 
@@ -103,7 +130,7 @@ export function createCommandManagedRuntimeClient(input: {
     return result;
   };
 
-  return {
+  const client: SandboxManagedRuntimeClient = {
     makeDir: async (remotePath) => {
       await runShell(`mkdir -p ${shellQuote(remotePath)}`);
     },
@@ -225,6 +252,17 @@ export function createCommandManagedRuntimeClient(input: {
       requireSuccessfulResult(result, command);
     },
   };
+
+  // Expose the native sync capability to the orchestrator only when the runner
+  // supports BOTH directions; a provider that advertises just one verb (or
+  // neither) keeps the byte-identical base64 fallback for both.
+  const { syncIn, syncOut } = input.runner;
+  if (syncIn && syncOut) {
+    client.syncIn = (operations) => syncIn(operations);
+    client.syncOut = (operations) => syncOut(operations);
+  }
+
+  return client;
 }
 
 export async function prepareCommandManagedRuntime(input: {

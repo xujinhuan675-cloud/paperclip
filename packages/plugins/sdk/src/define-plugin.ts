@@ -19,10 +19,12 @@
  *
  *     // Subscribe to events
  *     ctx.events.on("issue.created", async (event) => {
- *       const config = await ctx.config.get();
+ *       const companyId = event.companyId;
+ *       const config = await ctx.config.get(companyId);
+ *       const apiKey = await ctx.secrets.resolve(config.apiKeyRef, { companyId, configPath: "apiKeyRef" });
  *       await ctx.http.fetch(`https://api.linear.app/...`, {
  *         method: "POST",
- *         headers: { Authorization: `Bearer ${await ctx.secrets.resolve(config.apiKeyRef as string)}` },
+ *         headers: { Authorization: `Bearer ${apiKey}` },
  *         body: JSON.stringify({ title: event.payload.title }),
  *       });
  *     });
@@ -53,6 +55,18 @@ import type {
   PluginEnvironmentDestroyLeaseParams,
   PluginEnvironmentExecuteParams,
   PluginEnvironmentExecuteResult,
+  PluginEnvironmentSyncInParams,
+  PluginEnvironmentSyncOutParams,
+  PluginEnvironmentSyncResult,
+  PluginEnvironmentStartInteractiveSetupParams,
+  PluginEnvironmentInteractiveSetupSession,
+  PluginEnvironmentGetInteractiveSetupParams,
+  PluginEnvironmentCaptureTemplateParams,
+  PluginEnvironmentCaptureTemplateResult,
+  PluginEnvironmentCancelInteractiveSetupParams,
+  PluginEnvironmentCancelInteractiveSetupResult,
+  PluginEnvironmentDeleteTemplateParams,
+  PluginEnvironmentDeleteTemplateResult,
   PluginEnvironmentLease,
   PluginEnvironmentProbeParams,
   PluginEnvironmentProbeResult,
@@ -194,8 +208,8 @@ export interface PluginDefinition {
   onHealth?(): Promise<PluginHealthDiagnostics>;
 
   /**
-   * Called when the operator updates the plugin's instance configuration at
-   * runtime, without restarting the worker.
+   * Called when the operator updates this plugin's company-scoped configuration
+   * at runtime, without restarting the worker.
    *
    * If not implemented, the host restarts the worker to apply the new config.
    *
@@ -324,6 +338,52 @@ export interface PluginDefinition {
   onEnvironmentExecute?(
     params: PluginEnvironmentExecuteParams,
   ): Promise<PluginEnvironmentExecuteResult>;
+
+  /**
+   * Optional, opt-in: called before execution to place host files/directories at
+   * target sandbox paths using a provider-native transport instead of the default
+   * base64-over-exec fallback. Defining this hook (together with
+   * `onEnvironmentSyncOut`) advertises `environmentSyncIn`; leaving it undefined
+   * keeps the byte-identical fallback. See `doc/plugins/SANDBOX_FILE_SYNC_HOOKS.md`.
+   */
+  onEnvironmentSyncIn?(
+    params: PluginEnvironmentSyncInParams,
+  ): Promise<PluginEnvironmentSyncResult>;
+
+  /**
+   * Optional, opt-in: called after execution to copy sandbox files/directories
+   * back to target host paths using a provider-native transport. Defining this
+   * hook (together with `onEnvironmentSyncIn`) advertises `environmentSyncOut`.
+   * See `doc/plugins/SANDBOX_FILE_SYNC_HOOKS.md`.
+   */
+  onEnvironmentSyncOut?(
+    params: PluginEnvironmentSyncOutParams,
+  ): Promise<PluginEnvironmentSyncResult>;
+
+  /** Called to start an interactive setup sandbox and return redacted connection metadata. */
+  onEnvironmentStartInteractiveSetup?(
+    params: PluginEnvironmentStartInteractiveSetupParams,
+  ): Promise<PluginEnvironmentInteractiveSetupSession>;
+
+  /** Called to read setup status and, when authorized, a one-time connection payload. */
+  onEnvironmentGetInteractiveSetup?(
+    params: PluginEnvironmentGetInteractiveSetupParams,
+  ): Promise<PluginEnvironmentInteractiveSetupSession>;
+
+  /** Called to capture a reusable provider template from a live setup sandbox. */
+  onEnvironmentCaptureTemplate?(
+    params: PluginEnvironmentCaptureTemplateParams,
+  ): Promise<PluginEnvironmentCaptureTemplateResult>;
+
+  /** Called to cancel and clean up a setup sandbox without promoting a template. */
+  onEnvironmentCancelInteractiveSetup?(
+    params: PluginEnvironmentCancelInteractiveSetupParams,
+  ): Promise<PluginEnvironmentCancelInteractiveSetupResult>;
+
+  /** Called for optional best-effort cleanup of a captured provider template. */
+  onEnvironmentDeleteTemplate?(
+    params: PluginEnvironmentDeleteTemplateParams,
+  ): Promise<PluginEnvironmentDeleteTemplateResult>;
 }
 
 // ---------------------------------------------------------------------------
