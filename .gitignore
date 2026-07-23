@@ -62,6 +62,7 @@ tests/storybook-visual/.snapshots/
 tests/storybook-visual/baseline-review/
 tests/storybook-visual/test-results/
 tests/storybook-visual/playwright-report/
+graphify-out/
 .superset/
 .superpowers/
 .claude/worktrees/
