@@ -17,12 +17,19 @@ export interface LocalProcessSandboxPathAlias {
   target: string;
 }
 
+export interface LocalProcessSandboxReadOnlyMount {
+  /** Host path. It remains hidden except at the fixed sandbox target. */
+  source: string;
+  target: string;
+}
+
 export interface LocalProcessSandboxOptions {
   workspaceDir: string;
   filesystemScope?: "workspace" | null;
   managedPaths?: LocalProcessSandboxPath[];
   extraPaths?: LocalProcessSandboxPath[];
   pathAliases?: LocalProcessSandboxPathAlias[];
+  readOnlyMounts?: LocalProcessSandboxReadOnlyMount[];
   outboundRestorePaths?: string[];
   homeDir?: string | null;
   networkScope?: LocalProcessNetworkScope | null;
@@ -49,11 +56,7 @@ interface NetworkAllowlistProxy {
 }
 
 const SYSTEM_READ_PATHS = [
-  "/bin",
-  "/sbin",
   "/usr",
-  "/lib",
-  "/lib64",
   "/etc/ca-certificates",
   "/etc/ssl",
   "/etc/resolv.conf",
@@ -386,12 +389,6 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
 
   if (filesystemScope === "workspace") {
     args.push("--tmpfs", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp");
-    args.push(
-      "--symlink", "usr/bin", "/bin",
-      "--symlink", "usr/sbin", "/sbin",
-      "--symlink", "usr/lib", "/lib",
-      "--symlink", "usr/lib64", "/lib64",
-    );
     const created = new Set<string>(["/", "/proc", "/dev", "/tmp"]);
     const mounted = new Set<string>();
     const mount = async (source: string, access: LocalProcessSandboxAccess) => {
@@ -403,6 +400,16 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
       created.add(normalized);
     };
     for (const systemPath of SYSTEM_READ_PATHS) await mount(systemPath, "ro");
+    args.push(
+      "--symlink", "usr/bin", "/bin",
+      "--symlink", "usr/sbin", "/sbin",
+      "--symlink", "usr/lib", "/lib",
+      "--symlink", "usr/lib64", "/lib64",
+    );
+    created.add("/bin");
+    created.add("/sbin");
+    created.add("/lib");
+    created.add("/lib64");
     for (const executablePath of await executableReadPaths(input.executable)) await mount(executablePath, "ro");
     if (networkScope === "allowlist") {
       for (const nodePath of await executableReadPaths(process.execPath)) await mount(nodePath, "ro");
@@ -425,6 +432,28 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
       addParentDirectories(args, created, aliasPath);
       args.push("--bind", aliasTarget, aliasPath);
       created.add(aliasPath);
+    }
+    for (const [index, entry] of (input.options.readOnlyMounts ?? []).entries()) {
+      const source = normalizeAbsolutePath(entry.source, `Sandbox readOnlyMounts[${index}].source`);
+      const target = normalizeAbsolutePath(entry.target, `Sandbox readOnlyMounts[${index}].target`);
+      if (!(await pathExists(source))) {
+        throw new Error(`Sandbox read-only mount source "${source}" does not exist.`);
+      }
+      const existingMountIndex = args.findIndex(
+        (value, argIndex) => value === "--ro-bind" && args[argIndex + 2] === target,
+      );
+      if (existingMountIndex >= 0) {
+        const existingSource = args[existingMountIndex + 1];
+        if (existingSource !== source) {
+          throw new Error(
+            `Sandbox read-only mount target "${target}" is already bound from "${existingSource}".`,
+          );
+        }
+        continue;
+      }
+      addParentDirectories(args, created, target);
+      args.push("--ro-bind", source, target);
+      created.add(target);
     }
 
     if (networkScope === "allowlist") {

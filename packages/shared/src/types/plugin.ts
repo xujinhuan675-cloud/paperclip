@@ -428,6 +428,17 @@ export interface PluginManagedAgentResolution {
     entryFile: string;
     changedFiles: string[];
   } | null;
+  /** Adapter controls computed by the Paperclip host, never by plugin input. */
+  executionControls?: {
+    shellCommandAllowlist?: {
+      enforced: boolean;
+      mechanism: string;
+      policyVersion: number;
+      policyDigest: string;
+      runtimeVersion?: string | null;
+      reason?: string | null;
+    } | null;
+  } | null;
 }
 
 export interface PluginManagedProjectResolution {
@@ -544,6 +555,8 @@ export interface PluginLauncherDeclaration {
   id: string;
   /** Human-readable label shown for the launcher. */
   displayName: string;
+  /** Optional host-resolved icon name for native launcher surfaces. */
+  icon?: string;
   /** Optional description for operator-facing docs or future UI affordances. */
   description?: string;
   /** Where in the host UI this launcher should be placed. */

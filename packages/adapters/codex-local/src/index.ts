@@ -131,6 +131,7 @@ Core fields:
 - filesystemSandboxCommand (string, optional): Bubblewrap executable name or absolute path; defaults to "bwrap". Linux only.
 - networkScope (string, optional): "deny" blocks all network egress; "allowlist" permits only networkAllowlist targets through Paperclip's HTTP(S) proxy. Off by default.
 - networkAllowlist (string[], optional): exact hostnames, hostname:port entries, or origin URLs. Include the configured Codex provider origin, such as "api.openai.com" or a custom model provider gateway.
+- shellCommandPolicy (object, optional): host-only versioned policy with { version: 1, allowedPrefixes: string[][] }. When configured, the server requires CLI + Linux Bubblewrap + workspace filesystem + network deny, mounts a per-run managed requirements.toml and PreToolUse hook, and fails closed unless the host reports Codex hooks/execpolicy support. Plugins must not treat this field as enforced without the host-derived executionControls result.
 
 Operational fields:
 - timeoutSec (number, optional): run timeout in seconds
@@ -144,6 +145,7 @@ Operational fields:
 
 Notes:
 - filesystemScope and networkScope are spawn-level confinement and are orthogonal to Codex approval/sandbox flags. Both require Bubblewrap on the host and explicit engine="cli"; default or explicit ACP is rejected because ACP confinement is not yet supported. networkScope="allowlist" injects HTTP_PROXY/HTTPS_PROXY for the CLI while its private network namespace blocks direct sockets, so every required provider/API hostname must be listed explicitly.
+- shellCommandPolicy is enforced by Paperclip's host runtime, not by prompts or instructions. The managed PreToolUse hook sends the full Bash command through Codex's own execpolicy parser and denies malformed, unmatched, or non-allow decisions. Codex hook coverage is a guardrail for supported shell paths; Paperclip therefore disables code mode and multi-agent tools for this policy and still relies on Bubblewrap workspace/network confinement.
 - Prompts are piped via stdin (Codex receives "-" prompt argument).
 - If instructionsFilePath is configured, Paperclip prepends that file's contents to the stdin prompt on every run.
 - Codex exec automatically applies repo-scoped AGENTS.md instructions from the active workspace. Paperclip cannot suppress that discovery in exec mode, so repo AGENTS.md files may still apply even when you only configured an explicit instructionsFilePath.

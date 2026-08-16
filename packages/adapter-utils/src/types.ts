@@ -156,6 +156,21 @@ export interface AdapterInvocationMeta {
   prompt?: string;
   promptMetrics?: Record<string, number>;
   context?: Record<string, unknown>;
+  /** Host-derived controls that were effective for this invocation. */
+  executionControls?: AdapterExecutionControls;
+}
+
+export interface AdapterShellCommandAllowlistControl {
+  enforced: boolean;
+  mechanism: string;
+  policyVersion: number;
+  policyDigest: string;
+  runtimeVersion?: string | null;
+  reason?: string | null;
+}
+
+export interface AdapterExecutionControls {
+  shellCommandAllowlist?: AdapterShellCommandAllowlistControl | null;
 }
 
 export interface AdapterRuntimeMcpServer {
@@ -496,6 +511,10 @@ export interface ServerAdapterModule {
    * resolved inside this method — the caller receives a fully hydrated schema.
    */
   getConfigSchema?: () => Promise<AdapterConfigSchema> | AdapterConfigSchema;
+  /** Resolve controls from adapter config plus facts enforced by this host. */
+  resolveExecutionControls?: (
+    config: Record<string, unknown>,
+  ) => Promise<AdapterExecutionControls> | AdapterExecutionControls;
 
   // ---------------------------------------------------------------------------
   // Adapter capability flags

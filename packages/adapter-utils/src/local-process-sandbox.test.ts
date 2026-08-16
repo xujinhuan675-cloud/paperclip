@@ -101,6 +101,55 @@ describe("local process sandbox", () => {
     expect(target.args).toContain(workspace);
     expect(target.args).toContain(managedHome);
     expect(target.args.slice(-3)).toEqual([process.execPath, "-e", "console.log('ok')"]);
+    const usrMount = target.args.findIndex((value, index) => value === "--ro-bind" && target.args[index + 2] === "/usr");
+    const binSymlink = target.args.findIndex((value, index) => value === "--symlink" && target.args[index + 2] === "/bin");
+    expect(usrMount).toBeGreaterThanOrEqual(0);
+    expect(binSymlink).toBeGreaterThan(usrMount);
+  });
+
+  it("mounts a host-owned policy layer read-only at a fixed sandbox path", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-workspace-"));
+    const policy = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-policy-"));
+    cleanup.push(workspace, policy);
+    const target = await buildLocalProcessSandboxSpawnTarget({
+      executable: process.execPath,
+      args: ["--version"],
+      cwd: workspace,
+      options: {
+        workspaceDir: workspace,
+        filesystemScope: "workspace",
+        readOnlyMounts: [{ source: policy, target: "/etc/codex" }],
+      },
+    });
+
+    const mountIndex = target.args.findIndex((value, index) =>
+      value === "--ro-bind" && target.args[index + 1] === path.resolve(policy));
+    expect(mountIndex).toBeGreaterThanOrEqual(0);
+    expect(target.args.slice(mountIndex, mountIndex + 3)).toEqual([
+      "--ro-bind",
+      path.resolve(policy),
+      "/etc/codex",
+    ]);
+  });
+
+  it("rejects conflicting host-owned read-only mounts for the same target", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-workspace-"));
+    const first = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-policy-a-"));
+    const second = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-policy-b-"));
+    cleanup.push(workspace, first, second);
+    await expect(buildLocalProcessSandboxSpawnTarget({
+      executable: process.execPath,
+      args: ["--version"],
+      cwd: workspace,
+      options: {
+        workspaceDir: workspace,
+        filesystemScope: "workspace",
+        readOnlyMounts: [
+          { source: first, target: "/etc/codex" },
+          { source: second, target: "/etc/codex" },
+        ],
+      },
+    })).rejects.toThrow("already bound");
   });
 
   it.runIf(process.platform === "linux")("binds a confined absolute alias to the synchronized workspace", async () => {

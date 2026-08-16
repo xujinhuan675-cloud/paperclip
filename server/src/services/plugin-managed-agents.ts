@@ -17,6 +17,7 @@ import { agentService } from "./agents.js";
 import { approvalService } from "./approvals.js";
 import { logActivity } from "./activity-log.js";
 import { agentInstructionsBundleMode, agentInstructionsService } from "./agent-instructions.js";
+import { findActiveServerAdapter } from "../adapters/registry.js";
 
 const MANAGED_AGENT_ENTITY_TYPE = "managed_agent";
 const DEFAULT_MANAGED_AGENT_ADAPTER_TYPE = "process";
@@ -400,6 +401,19 @@ export function pluginManagedAgentService(
     status: PluginManagedAgentResolution["status"],
     approvalId?: string | null,
   ): Promise<PluginManagedAgentResolution> {
+    let executionControls: PluginManagedAgentResolution["executionControls"] = null;
+    if (agent) {
+      const adapter = findActiveServerAdapter(agent.adapterType);
+      try {
+        executionControls = await adapter?.resolveExecutionControls?.(
+          agent.adapterConfig && typeof agent.adapterConfig === "object" && !Array.isArray(agent.adapterConfig)
+            ? agent.adapterConfig as Record<string, unknown>
+            : {},
+        ) ?? null;
+      } catch {
+        executionControls = null;
+      }
+    }
     return {
       pluginKey: options.pluginKey,
       resourceKind: "agent",
@@ -410,6 +424,7 @@ export function pluginManagedAgentService(
       status,
       approvalId: approvalId ?? null,
       defaultDrift: await managedInstructionDefaultDrift(companyId, agent, declaration),
+      executionControls,
     };
   }
 

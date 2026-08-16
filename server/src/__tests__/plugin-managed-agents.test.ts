@@ -23,6 +23,7 @@ import {
 } from "./helpers/embedded-postgres.js";
 import { buildHostServices } from "../services/plugin-host-services.js";
 import { agentService } from "../services/agents.js";
+import { registerServerAdapter, unregisterServerAdapter } from "../adapters/registry.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
@@ -169,6 +170,37 @@ describeEmbeddedPostgres("plugin-managed agents", () => {
       resourceKey: "wiki-maintainer",
       agentId: created.agentId,
     });
+  });
+
+  it("returns adapter execution controls computed by the host", async () => {
+    const adapterType = "managed-control-test";
+    registerServerAdapter({
+      type: adapterType,
+      execute: async () => ({ exitCode: 0, signal: null, timedOut: false }),
+      testEnvironment: async () => ({ adapterType, status: "pass", checks: [], testedAt: new Date().toISOString() }),
+      resolveExecutionControls: async () => ({
+        shellCommandAllowlist: {
+          enforced: true,
+          mechanism: "host-test-policy",
+          policyVersion: 1,
+          policyDigest: "a".repeat(64),
+        },
+      }),
+    });
+    try {
+      const pluginManifest = manifest();
+      pluginManifest.agents![0] = { ...pluginManifest.agents![0]!, adapterType, adapterConfig: {} };
+      const { companyId, services } = await seedCompanyAndPlugin({ manifest: pluginManifest });
+      const created = await services.agents.managedReconcile({ companyId, agentKey: "wiki-maintainer" });
+      expect(created.executionControls?.shellCommandAllowlist).toEqual({
+        enforced: true,
+        mechanism: "host-test-policy",
+        policyVersion: 1,
+        policyDigest: "a".repeat(64),
+      });
+    } finally {
+      unregisterServerAdapter(adapterType);
+    }
   });
 
   it("preserves user edits during reconcile and resets only on explicit reset", async () => {

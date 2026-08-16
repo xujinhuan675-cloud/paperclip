@@ -36,6 +36,7 @@ import {
   getConfigSchema as getCodexConfigSchema,
   CODEX_DEVICE_LOGIN_COMMAND,
   parseDeviceLoginPrompt,
+  resolveCodexShellCommandPolicyControls,
 } from "@paperclipai/adapter-codex-local/server";
 import {
   agentConfigurationDoc as codexAgentConfigurationDoc,
@@ -355,6 +356,7 @@ const codexLocalAdapter: ServerAdapterModule = {
   getConfigSchema: getCodexConfigSchema,
   getQuotaWindows: codexGetQuotaWindows,
   loginCapability: codexLoginCapability,
+  resolveExecutionControls: resolveCodexShellCommandPolicyControls,
 };
 
 const paperclipRunnerAdapter: ServerAdapterModule = {

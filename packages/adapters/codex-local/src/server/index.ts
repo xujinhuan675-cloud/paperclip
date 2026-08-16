@@ -1,5 +1,15 @@
 export { execute, ensureCodexSkillsInjected } from "./execute.js";
 export {
+  CODEX_SHELL_COMMAND_POLICY_MECHANISM,
+  CODEX_SHELL_COMMAND_POLICY_MINIMUM_CODEX_VERSION,
+  CODEX_SHELL_COMMAND_POLICY_VERSION,
+  parseCodexShellCommandPolicy,
+  prepareCodexShellCommandPolicy,
+  resolveCodexShellCommandPolicyControls,
+  type CodexShellCommandPolicyProbeOptions,
+  type PreparedCodexShellCommandPolicy,
+} from "./shell-command-policy.js";
+export {
   resolveCodexAuthPrecedence,
   CODEX_SANDBOX_AUTH_PRECEDENCE_WARNING,
   CODEX_SANDBOX_AUTH_PRECEDENCE_WARNING_LOG_LINE,

@@ -87,6 +87,10 @@ import {
   resolveCodexAuthPrecedence,
 } from "./auth-precedence.js";
 import { prepareCodexRuntimeConfig } from "./runtime-config.js";
+import {
+  prepareCodexShellCommandPolicy,
+  type PreparedCodexShellCommandPolicy,
+} from "./shell-command-policy.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 import { buildCodexExecArgs } from "./codex-args.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
@@ -730,6 +734,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // here so the outer `finally` can remove it on every exit path (teardown and
   // error), never only the happy path.
   let stagedCodexHomeDir: string | null = null;
+  let preparedShellCommandPolicy: PreparedCodexShellCommandPolicy | null = null;
   try {
     for (const note of preparedRuntimeConfig.notes) {
       await onLog("stdout", `[paperclip] ${note}\n`);
@@ -980,12 +985,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const billingType = resolveCodexBillingType(effectiveEnv);
     const networkScope = parseLocalProcessNetworkScope(config.networkScope);
     const filesystemScope = parseLocalProcessFilesystemScope(config.filesystemScope);
+    if (config.shellCommandPolicy != null) {
+      if (executionTargetIsRemote) throw new Error("shell_command_policy_requires_local_execution_target");
+      preparedShellCommandPolicy = await prepareCodexShellCommandPolicy({ config });
+    }
+    const effectiveCommand = preparedShellCommandPolicy?.codexExecutable ?? command;
     const localProcessSandbox: LocalProcessSandboxOptions | null =
       (filesystemScope || networkScope) && !executionTargetIsRemote
         ? {
             workspaceDir: effectiveExecutionCwd,
             filesystemScope,
             managedPaths: [{ path: effectiveCodexHome, access: "rw" }],
+            readOnlyMounts: preparedShellCommandPolicy?.readOnlyMounts ?? [],
             extraPaths: parseLocalProcessSandboxExtraPaths(config.filesystemExtraPaths),
             pathAliases: targetWorkspaceRealization?.mode === "copy"
               ? targetWorkspaceRealization.pathAliases
@@ -998,7 +1009,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
               paperclipBaseEnv.PAPERCLIP_API_URL,
               ...runtimeMcpGateways.map((gateway) => gateway.endpointPath),
             ],
-            command: asString(config.filesystemSandboxCommand, "bwrap"),
+            command: preparedShellCommandPolicy?.bwrapExecutable
+              ?? asString(config.filesystemSandboxCommand, "bwrap"),
           }
         : null;
     if (localProcessSandbox) {
@@ -1009,9 +1021,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         "stdout",
         `[paperclip] Confining Codex with ${scopes} scope.\n`,
       );
+      if (preparedShellCommandPolicy) {
+        await onLog(
+          "stdout",
+          `[paperclip] Enforcing managed shell command policy ${preparedShellCommandPolicy.control.policyDigest}.\n`,
+        );
+      }
     }
     const runtimeEnv = Object.fromEntries(
-      Object.entries(ensurePathInEnv(effectiveEnv)).filter(
+      Object.entries(ensurePathInEnv({
+        ...effectiveEnv,
+        ...(preparedShellCommandPolicy ? { PATH: preparedShellCommandPolicy.trustedPath } : {}),
+      })).filter(
         (entry): entry is [string, string] => typeof entry[1] === "string",
       ),
     );
@@ -1026,8 +1047,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       graceSec,
       onLog,
     });
-    await ensureAdapterExecutionTargetCommandResolvable(command, executionTarget, cwd, runtimeEnv);
-    const resolvedCommand = await resolveAdapterExecutionTargetCommandForLogs(command, executionTarget, cwd, runtimeEnv);
+    await ensureAdapterExecutionTargetCommandResolvable(effectiveCommand, executionTarget, cwd, runtimeEnv);
+    const resolvedCommand = await resolveAdapterExecutionTargetCommandForLogs(
+      effectiveCommand,
+      executionTarget,
+      cwd,
+      runtimeEnv,
+    );
     const loggedEnv = buildInvocationEnvForLogs(env, {
       runtimeEnv,
       includeRuntimeKeys: ["HOME"],
@@ -1227,6 +1253,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           prompt,
           promptMetrics,
           context,
+          executionControls: preparedShellCommandPolicy
+            ? { shellCommandAllowlist: preparedShellCommandPolicy.control }
+            : undefined,
         });
       }
 
@@ -1300,7 +1329,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       };
 
       try {
-        const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
+        const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, effectiveCommand, args, {
           cwd,
           env,
           stdin: prompt,
@@ -1583,6 +1612,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       }
     }
   } finally {
+    if (preparedShellCommandPolicy) {
+      await preparedShellCommandPolicy.cleanup().catch(async (error) => {
+        await onLog(
+          "stderr",
+          `[paperclip] Failed to remove managed shell command policy layer: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+      });
+    }
     // Remove the staged CODEX_HOME allowlist temp dir on every exit path
     // (teardown AND error), never only the happy path. Cleanup failure is
     // logged, not fatal — a leaked temp dir must not crash the run.
