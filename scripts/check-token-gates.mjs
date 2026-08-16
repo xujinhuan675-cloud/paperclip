@@ -86,17 +86,20 @@ const CSS_PATH = resolve(UI_SRC, "index.css");
 // a plain hyphen-minus as the path/reason separator, and of the historical
 // per-batch prose blocks NOT being in this format (they are not parsed;
 // only lines starting with "* allow " are).
-function loadAllowlist(cssPath) {
-  const css = readFileSync(cssPath, "utf8");
+export function parseAllowlist(css) {
   const entries = [];
   const lineRe = /^\s*\*\s*allow\s+(\S+)\s+(?:—|-{1,2})\s*(.*)$/;
-  for (const rawLine of css.split("\n")) {
+  for (const rawLine of css.split(/\r?\n/)) {
     const m = rawLine.match(lineRe);
     if (m) {
       entries.push({ path: m[1], reason: m[2].trim() });
     }
   }
   return entries;
+}
+
+function loadAllowlist(cssPath) {
+  return parseAllowlist(readFileSync(cssPath, "utf8"));
 }
 
 function isAllowlisted(relPath, allowlist) {
@@ -338,4 +341,6 @@ function relPathToPosix(filePath) {
   return ("ui/src/" + relative(UI_SRC, filePath)).split("\\").join("/");
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

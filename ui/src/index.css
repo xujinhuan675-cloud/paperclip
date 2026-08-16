@@ -2645,11 +2645,9 @@ span.paperclip-mention-chip[data-mention-kind="external-object"] {
    table did not catch them, but they are still value-bearing gradient
    brackets in scope for this batch's final sweep.
 
-   Allowlist (sites intentionally left as-is - see ALLOWLIST doc-comment
-   at the end of this file for the machine-readable list consumed by
-   scripts/check-token-gates.mjs):
-   allow ui/src/components/ui/dialog.tsx — tw-animate-css plugin utilities (zoom-in-[0.97] etc.) are dead/no-op classes today (plugin not installed, verified via built-CSS grep); nothing to tokenize without visually changing a currently-inert class
-   allow ui/src/components/ui/alert-dialog.tsx — same tw-animate-css dead-class situation as dialog.tsx
+   The dialog and alert-dialog tw-animate-css classes found during this run
+   were removed because that plugin is not installed and the classes emitted
+   no CSS. They are intentionally not allowlisted below.
 */
 :root {
   --gtc-1: 56px 56px 24px minmax(0,1fr); /* Extracted from ui/src/components/DocumentDiffModal.tsx (grid-cols-[56px_56px_24px_minmax(0,1fr)]). */
@@ -2801,8 +2799,6 @@ span.paperclip-mention-chip[data-mention-kind="external-object"] {
    * allow ui/src/components/CompanyPatternIcon.tsx — canvas 2D fillStyle built from a runtime-computed template literal, not a static literal at all
    * allow ui/src/components/onboarding/PillGuy.tsx — inline rendering of the approved pill-1 dormant/alive brand SVG assets; their fixed eye, body, tuft, and gradient fills are the illustration artwork rather than themeable interface colors
    * allow ui/src/components/ui/scroll-area.tsx — rounded-[inherit] is a CSS keyword, not a literal value; nothing to extract
-   * allow ui/src/components/ui/dialog.tsx — tw-animate-css plugin utilities (zoom-in-[0.97], zoom-out-[0.97], slide-in-from-top-[1%], slide-out-to-top-[1%], animate-in, animate-out, fade-in-0, fade-out-0) are dead/no-op classes today (the tw-animate-css plugin is not installed and no matching @utility exists in this file; confirmed via grep of the built storybook-static CSS — none of these class names emit any rule); nothing to tokenize without visually changing a currently-inert class
-   * allow ui/src/components/ui/alert-dialog.tsx — same tw-animate-css dead-class situation as dialog.tsx (zoom-out-[0.97], zoom-in-[0.97])
    * allow ui/src/components/ProjectWorkspaceSummaryCard.tsx — min-[420px]: is a Tailwind arbitrary BREAKPOINT variant (responsive container-query-style prefix), not a value applied to a property; the variant position cannot reference a CSS custom property, so it cannot be tokenized without changing Tailwind's own variant syntax
    * allow ui/src/components/FileTree.tsx — max-[480px]: arbitrary breakpoint variant (x2), same reasoning as min-[420px] above
    * allow ui/src/pages/RunTranscriptUxLab.tsx — first-party intentional one-off decoration (demo/UX-lab page): hero/card gradients + shadows reverted from singleton tokens per DECISION-SHEET.md B1 user ruling
