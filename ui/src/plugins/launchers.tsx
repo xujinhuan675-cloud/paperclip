@@ -26,9 +26,11 @@ import type {
 import { pluginsApi, type PluginUiContribution } from "@/api/plugins";
 import { authApi } from "@/api/auth";
 import { Button } from "@/components/ui/button";
+import { SidebarNavItem } from "@/components/SidebarNavItem";
 import { useNavigate, useLocation } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { BrainCircuit, Puzzle, Workflow, type LucideIcon } from "lucide-react";
 import {
   PluginBridgeContext,
   type PluginHostContext,
@@ -182,6 +184,18 @@ function launcherDisplayName(launcher: ResolvedPluginLauncher, contribution: Plu
     slot.type === "routeSidebar" && slot.routePath?.toLowerCase() === routePath
   );
   return routeSidebar?.displayName ?? launcher.displayName;
+}
+
+const launcherIcons: Readonly<Record<string, LucideIcon>> = {
+  "brain-circuit": BrainCircuit,
+  puzzle: Puzzle,
+  workflow: Workflow,
+};
+
+function launcherIcon(launcher: ResolvedPluginLauncher): LucideIcon {
+  const paramIcon = launcher.action.params?.icon;
+  const iconName = launcher.icon ?? (typeof paramIcon === "string" ? paramIcon : null);
+  return (iconName && launcherIcons[iconName]) || Puzzle;
 }
 
 function trapFocus(container: HTMLElement, event: KeyboardEvent): void {
@@ -754,13 +768,29 @@ function DefaultLauncherTrigger({
   displayName,
   launcher,
   placementZone,
+  context,
   onClick,
 }: {
   displayName?: string;
   launcher: ResolvedPluginLauncher;
   placementZone: PluginLauncherPlacementZone;
-  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  context: PluginLauncherContext;
+  onClick: (event: ReactMouseEvent<HTMLElement>) => void;
 }) {
+  if (placementZone === "sidebar" && (launcher.action.type === "navigate" || launcher.action.type === "deepLink")) {
+    return (
+      <SidebarNavItem
+        to={resolveLauncherNavigationTarget(launcher.action.target, context)}
+        label={displayName ?? launcher.displayName}
+        icon={launcherIcon(launcher)}
+        onClick={(event) => {
+          event.preventDefault();
+          onClick(event);
+        }}
+      />
+    );
+  }
+
   return (
     <Button
       type="button"
@@ -817,6 +847,7 @@ export function PluginLauncherOutlet({
             displayName={launcherDisplayName(launcher, contributionsByPluginId.get(launcher.pluginId))}
             launcher={launcher}
             placementZone={launcher.placementZone}
+            context={context}
             onClick={(event) => {
               const contribution = contributionsByPluginId.get(launcher.pluginId);
               if (!contribution) return;
@@ -851,6 +882,7 @@ export function PluginLauncherButton({
       <DefaultLauncherTrigger
         launcher={launcher}
         placementZone={launcher.placementZone}
+        context={context}
         onClick={(event) => {
           event.preventDefault();
           onActivated?.();

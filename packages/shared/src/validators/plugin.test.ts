@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PLUGIN_CAPABILITIES } from "../constants.js";
 import { resolveDeclaredSandboxCapabilities } from "../environment-support.js";
-import { pluginManagedRoutineDeclarationSchema, pluginManifestV1Schema, pluginUiSlotDeclarationSchema } from "./plugin.js";
+import {
+  pluginLauncherDeclarationSchema,
+  pluginManagedRoutineDeclarationSchema,
+  pluginManifestV1Schema,
+  pluginUiSlotDeclarationSchema,
+} from "./plugin.js";
 
 function buildSandboxProviderManifest(driver: Record<string, unknown>) {
   return {
@@ -33,6 +38,18 @@ describe("plugin capability constants", () => {
 });
 
 describe("plugin manifest validators", () => {
+  it("accepts a host-resolved launcher icon name", () => {
+    const parsed = pluginLauncherDeclarationSchema.parse({
+      id: "architecture-map-sidebar",
+      displayName: "Mind Map",
+      icon: "brain-circuit",
+      placementZone: "sidebar",
+      action: { type: "navigate", target: "architecture-map" },
+    });
+
+    expect(parsed.icon).toBe("brain-circuit");
+  });
+
   it("accepts existing-style plugins that do not request access or authorization capabilities", () => {
     const parsed = pluginManifestV1Schema.parse({
       id: "paperclip.compat-dashboard",

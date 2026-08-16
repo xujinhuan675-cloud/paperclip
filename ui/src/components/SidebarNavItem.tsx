@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { NavLink } from "@/lib/router";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
@@ -65,6 +65,7 @@ interface SidebarNavItemProps {
   trailingLabel?: string;
   /** Rendered inside the right-aligned status cluster, before the live dot. */
   liveAccessory?: ReactNode;
+  onClick?: (event: ReactMouseEvent<HTMLAnchorElement>) => void;
 }
 
 export function SidebarNavItem({
@@ -86,6 +87,7 @@ export function SidebarNavItem({
   trailing,
   trailingLabel,
   liveAccessory,
+  onClick,
 }: SidebarNavItemProps) {
   const { isMobile, setSidebarOpen, collapsed, peeking } = useSidebar();
   // A contextual takeover forces full labels even when the saved global app
@@ -119,7 +121,10 @@ export function SidebarNavItem({
       state={SIDEBAR_SCROLL_RESET_STATE}
       end={end}
       aria-label={railAriaLabel}
-      onClick={() => { if (isMobile) setSidebarOpen(false); }}
+      onClick={(event) => {
+        onClick?.(event);
+        if (isMobile) setSidebarOpen(false);
+      }}
       className={({ isActive }) =>
         cn(
           // One rhythm and one inset pill highlight: mx-2 floats the row off

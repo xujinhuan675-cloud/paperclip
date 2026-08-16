@@ -546,6 +546,9 @@ export type PluginLauncherRenderDeclarationInput =
 export const pluginLauncherDeclarationSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
+  icon: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, {
+    message: "icon must be a lowercase kebab-case name",
+  }).optional(),
   description: z.string().optional(),
   placementZone: z.enum(PLUGIN_LAUNCHER_PLACEMENT_ZONES),
   exportName: z.string().min(1).optional(),
