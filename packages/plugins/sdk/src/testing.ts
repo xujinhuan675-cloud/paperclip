@@ -737,6 +737,9 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
 
   const ctx: PluginContext = {
     manifest,
+    runDetached<T>(fn: () => T): T {
+      return fn();
+    },
     config: {
       async get() {
         return { ...currentConfig };

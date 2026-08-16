@@ -158,6 +158,204 @@ describe("worker performAction context", () => {
 });
 
 describe("worker invocation scope propagation", () => {
+  it("can run detached async work without reusing the completed invocation id", async () => {
+    const hostToWorker = new PassThrough();
+    const workerToHost = new PassThrough();
+    const hostReadline = createInterface({ input: workerToHost });
+    const pending = new Map<string, (response: JsonRpcResponse) => void>();
+    const nestedInvocationIds: Array<string | undefined> = [];
+    let nextRequestId = 1;
+
+    const plugin = definePlugin({
+      async setup(ctx) {
+        ctx.data.register("probe", async (params) => ctx.runDetached(async () => {
+          const company = await ctx.companies.get(String(params.companyId));
+          return { company };
+        }));
+      },
+    });
+
+    const worker = startWorkerRpcHost({
+      plugin,
+      stdin: hostToWorker,
+      stdout: workerToHost,
+    });
+
+    function callWorker(method: string, params: unknown, invocation?: PluginInvocationContext) {
+      const id = `host-${nextRequestId++}`;
+      const request = {
+        ...createRequest(method, params, id),
+        ...(invocation ? { paperclipInvocation: invocation } : {}),
+      };
+      const result = new Promise<unknown>((resolve, reject) => {
+        pending.set(id, (response) => {
+          if ("error" in response && response.error) {
+            reject(new Error(response.error.message));
+            return;
+          }
+          resolve((response as { result?: unknown }).result);
+        });
+      });
+      hostToWorker.write(serializeMessage(request));
+      return result;
+    }
+
+    hostReadline.on("line", (line) => {
+      const message = parseMessage(line);
+      if (isJsonRpcResponse(message)) {
+        pending.get(String(message.id))?.(message);
+        pending.delete(String(message.id));
+        return;
+      }
+      if (!isJsonRpcRequest(message) || message.method !== "companies.get") return;
+      nestedInvocationIds.push((message as { paperclipInvocationId?: string }).paperclipInvocationId);
+      const companyId = (message.params as { companyId: string }).companyId;
+      hostToWorker.write(serializeMessage(createSuccessResponse(message.id, { id: companyId })));
+    });
+
+    try {
+      await callWorker("initialize", {
+        manifest: {
+          id: "paperclip.detached-scope-test",
+          apiVersion: 1,
+          version: "1.0.0",
+          displayName: "Detached scope test",
+          description: "Detached scope test",
+          author: "Paperclip",
+          categories: ["automation"],
+          capabilities: ["companies.read"],
+          entrypoints: { worker: "dist/worker.js" },
+        },
+        config: {},
+        instanceInfo: { instanceId: "test", hostVersion: "0.0.0" },
+        apiVersion: 1,
+      });
+
+      await expect(callWorker(
+        "getData",
+        { key: "probe", companyId: "company-a", params: { companyId: "company-a" } },
+        { id: "invocation-a", scope: { companyId: "company-a" } },
+      )).resolves.toEqual({ company: { id: "company-a" } });
+      expect(nestedInvocationIds).toEqual([undefined]);
+    } finally {
+      worker.stop();
+      hostReadline.close();
+      hostToWorker.destroy();
+      workerToHost.destroy();
+    }
+  });
+
+  it("sends HTTP cancellation with a request id and without a stale invocation id", async () => {
+    const hostToWorker = new PassThrough();
+    const workerToHost = new PassThrough();
+    const hostReadline = createInterface({ input: workerToHost });
+    const pending = new Map<string, (response: JsonRpcResponse) => void>();
+    const fetchInvocationIds: Array<string | undefined> = [];
+    const cancelInvocationIds: Array<string | undefined> = [];
+    let fetchRequestId: string | number | undefined;
+    let nextRequestId = 1;
+
+    const plugin = definePlugin({
+      async setup(ctx) {
+        ctx.actions.register("cancel-http", async () => {
+          const controller = new AbortController();
+          const request = ctx.http.fetch("https://example.test/slow", { signal: controller.signal });
+          setTimeout(() => controller.abort(), 0);
+          try {
+            await request;
+            return { cancelled: false };
+          } catch (error) {
+            return { cancelled: true, error: error instanceof Error ? error.name : String(error) };
+          }
+        });
+      },
+    });
+
+    const worker = startWorkerRpcHost({
+      plugin,
+      stdin: hostToWorker,
+      stdout: workerToHost,
+    });
+
+    function callWorker(method: string, params: unknown, invocation?: PluginInvocationContext) {
+      const id = `host-${nextRequestId++}`;
+      const request = {
+        ...createRequest(method, params, id),
+        ...(invocation ? { paperclipInvocation: invocation } : {}),
+      };
+      const result = new Promise<unknown>((resolve, reject) => {
+        pending.set(id, (response) => {
+          if ("error" in response && response.error) {
+            reject(new Error(response.error.message));
+            return;
+          }
+          resolve((response as { result?: unknown }).result);
+        });
+      });
+      hostToWorker.write(serializeMessage(request));
+      return result;
+    }
+
+    hostReadline.on("line", (line) => {
+      const message = parseMessage(line);
+      if (isJsonRpcResponse(message)) {
+        pending.get(String(message.id))?.(message);
+        pending.delete(String(message.id));
+        return;
+      }
+      if (!isJsonRpcRequest(message)) return;
+      if (message.method === "http.fetch") {
+        fetchRequestId = message.id;
+        fetchInvocationIds.push((message as { paperclipInvocationId?: string }).paperclipInvocationId);
+        return;
+      }
+      if (message.method !== "http.cancel") return;
+      const params = message.params as { requestId?: string };
+      expect(params.requestId).toBeTruthy();
+      cancelInvocationIds.push((message as { paperclipInvocationId?: string }).paperclipInvocationId);
+      if (fetchRequestId !== undefined) {
+        hostToWorker.write(serializeMessage(createErrorResponse(
+          fetchRequestId,
+          PLUGIN_RPC_ERROR_CODES.INTERNAL,
+          "HTTP request cancelled",
+        )));
+      }
+      hostToWorker.write(serializeMessage(createSuccessResponse(message.id, null)));
+    });
+
+    try {
+      await callWorker("initialize", {
+        manifest: {
+          id: "paperclip.http-cancel-test",
+          apiVersion: 1,
+          version: "1.0.0",
+          displayName: "HTTP cancel test",
+          description: "HTTP cancel test",
+          author: "Paperclip",
+          categories: ["automation"],
+          capabilities: ["http.outbound"],
+          entrypoints: { worker: "dist/worker.js" },
+        },
+        config: {},
+        instanceInfo: { instanceId: "test", hostVersion: "0.0.0" },
+        apiVersion: 1,
+      });
+
+      await expect(callWorker(
+        "performAction",
+        { key: "cancel-http", params: {} },
+        { id: "invocation-a", scope: { companyId: "company-a" } },
+      )).resolves.toEqual({ cancelled: true, error: "JsonRpcCallError" });
+      expect(fetchInvocationIds).toEqual(["invocation-a"]);
+      expect(cancelInvocationIds).toEqual([undefined]);
+    } finally {
+      worker.stop();
+      hostReadline.close();
+      hostToWorker.destroy();
+      workerToHost.destroy();
+    }
+  });
+
   it("keeps overlapping company scopes local to each getData invocation", async () => {
     const hostToWorker = new PassThrough();
     const workerToHost = new PassThrough();

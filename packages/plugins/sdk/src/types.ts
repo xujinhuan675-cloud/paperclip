@@ -2126,6 +2126,13 @@ export interface PluginContext {
   /** The plugin's manifest as validated at install time. */
   manifest: PaperclipPluginManifestV1;
 
+  /**
+   * Run asynchronous background work without inheriting a short-lived host
+   * invocation. Company-scoped calls are authorized through the worker's
+   * configured proactive company scopes.
+   */
+  runDetached<T>(fn: () => T): T;
+
   /** Read resolved operator configuration. */
   config: PluginConfigClient;
 

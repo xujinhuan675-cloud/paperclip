@@ -340,6 +340,7 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
   let configCompanyId: string | null = null;
   let databaseNamespace: string | null = null;
   const invocationContextStorage = new AsyncLocalStorage<PluginInvocationContext>();
+  const detachedContextStorage = new AsyncLocalStorage<boolean>();
 
   // Plugin handler registrations (populated during setup())
   const eventHandlers: EventRegistration[] = [];
@@ -429,7 +430,9 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
       });
 
       try {
-        const activeInvocation = invocationContextStorage.getStore();
+        const activeInvocation = detachedContextStorage.getStore()
+          ? undefined
+          : invocationContextStorage.getStore();
         const request = {
           ...createRequest(method, params, id),
           ...(activeInvocation ? { paperclipInvocationId: activeInvocation.id } : {}),
@@ -446,7 +449,9 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
    */
   function notifyHost(method: string, params: unknown): void {
     try {
-      const activeInvocation = invocationContextStorage.getStore();
+      const activeInvocation = detachedContextStorage.getStore()
+        ? undefined
+        : invocationContextStorage.getStore();
       sendMessage({
         ...createNotification(method, params),
         ...(activeInvocation ? { paperclipInvocationId: activeInvocation.id } : {}),
@@ -465,6 +470,10 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
       get manifest() {
         if (!manifest) throw new Error("Plugin context accessed before initialization");
         return manifest;
+      },
+
+      runDetached<T>(fn: () => T): T {
+        return detachedContextStorage.run(true, fn);
       },
 
       config: {
@@ -580,7 +589,13 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
 
       http: {
         async fetch(url: string, init?: RequestInit): Promise<Response> {
+          if (init?.signal?.aborted) {
+            throw new DOMException("The operation was aborted", "AbortError");
+          }
           const serializedInit: Record<string, unknown> = {};
+          const requestId = init?.signal
+            ? `plugin-http-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+            : undefined;
           if (init) {
             if (init.method) serializedInit.method = init.method;
             if (init.headers) {
@@ -604,17 +619,28 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
             }
           }
 
-          const result = await callHost("http.fetch", {
-            url,
-            init: Object.keys(serializedInit).length > 0 ? serializedInit : undefined,
-          });
+          const cancel = () => {
+            if (!requestId) return;
+            void detachedContextStorage.run(true, () => callHost("http.cancel", { requestId }))
+              .catch(() => undefined);
+          };
+          init?.signal?.addEventListener("abort", cancel, { once: true });
+          try {
+            const result = await callHost("http.fetch", {
+              url,
+              init: Object.keys(serializedInit).length > 0 ? serializedInit : undefined,
+              ...(requestId ? { requestId } : {}),
+            });
 
-          // Reconstruct a Response-like object from the serialized result
-          return new Response(result.body, {
-            status: result.status,
-            statusText: result.statusText,
-            headers: result.headers,
-          });
+            // Reconstruct a Response-like object from the serialized result
+            return new Response(result.body, {
+              status: result.status,
+              statusText: result.statusText,
+              headers: result.headers,
+            });
+          } finally {
+            init?.signal?.removeEventListener("abort", cancel);
+          }
         },
       },
 

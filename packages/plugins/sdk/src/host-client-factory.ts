@@ -143,9 +143,10 @@ export interface HostServices {
     subscribe(params: WorkerToHostMethods["events.subscribe"][0]): Promise<void>;
   };
 
-  /** Provides `http.fetch`. */
+  /** Provides `http.fetch` and cancellation for an in-flight request. */
   http: {
     fetch(params: WorkerToHostMethods["http.fetch"][0]): Promise<WorkerToHostMethods["http.fetch"][1]>;
+    cancel(params: WorkerToHostMethods["http.cancel"][0]): Promise<void>;
   };
 
   /** Provides `secrets.resolve`. */
@@ -408,6 +409,7 @@ const METHOD_CAPABILITY_MAP: Record<WorkerToHostMethodName, PluginCapability | n
 
   // HTTP
   "http.fetch": "http.outbound",
+  "http.cancel": "http.outbound",
 
   // Secrets
   "secrets.resolve": "secrets.read-ref",
@@ -772,6 +774,9 @@ export function createHostClientHandlers(
     // HTTP
     "http.fetch": gated("http.fetch", async (params) => {
       return services.http.fetch(params);
+    }),
+    "http.cancel": gated("http.cancel", async (params) => {
+      return services.http.cancel(params);
     }),
 
     // Secrets

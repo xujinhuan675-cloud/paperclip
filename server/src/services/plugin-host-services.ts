@@ -288,6 +288,12 @@ async function executePinnedHttpRequest(
   const chunks: Buffer[] = [];
   let totalBytes = 0;
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
     response.on("data", (chunk: Buffer | string) => {
       const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += buf.length;
@@ -298,8 +304,12 @@ async function executePinnedHttpRequest(
       }
       chunks.push(buf);
     });
-    response.on("end", resolve);
-    response.on("error", reject);
+    response.on("end", () => finish(resolve));
+    response.on("error", (error) => finish(() => reject(error)));
+    response.on("aborted", () => finish(() => reject(new Error("HTTP response was aborted"))));
+    response.on("close", () => {
+      if (!response.complete) finish(() => reject(new Error("HTTP response closed before completion")));
+    });
   });
 
   const headers: Record<string, string> = {};
@@ -760,6 +770,7 @@ export function buildHostServices(
 
   // Track active session event subscriptions for cleanup
   const activeSubscriptions = new Set<{ unsubscribe: () => void; timer: ReturnType<typeof setTimeout> }>();
+  const activeHttpRequests = new Map<string, AbortController>();
   let disposed = false;
 
   const ensureCompanyId = (companyId?: string) => {
@@ -1579,19 +1590,31 @@ export function buildHostServices(
 
     http: {
       async fetch(params) {
-        // SSRF protection: validate protocol whitelist + block private IPs.
-        // Resolve once, then connect directly to that IP to prevent DNS rebinding.
-        const target = await validateAndResolveFetchUrl(params.url);
-
+        const requestId = typeof params.requestId === "string" && params.requestId.trim()
+          ? params.requestId.trim()
+          : undefined;
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), PLUGIN_FETCH_TIMEOUT_MS);
+        if (requestId) activeHttpRequests.set(requestId, controller);
 
         try {
-          const init = params.init as RequestInit | undefined;
-          return await executePinnedHttpRequest(target, init, controller.signal);
+          // SSRF protection: validate protocol whitelist + block private IPs.
+          // Resolve once, then connect directly to that IP to prevent DNS rebinding.
+          const target = await validateAndResolveFetchUrl(params.url);
+          const timeout = setTimeout(() => controller.abort(), PLUGIN_FETCH_TIMEOUT_MS);
+          try {
+            const init = params.init as RequestInit | undefined;
+            return await executePinnedHttpRequest(target, init, controller.signal);
+          } finally {
+            clearTimeout(timeout);
+          }
         } finally {
-          clearTimeout(timeout);
+          if (requestId && activeHttpRequests.get(requestId) === controller) activeHttpRequests.delete(requestId);
         }
+      },
+      async cancel(params) {
+        const requestId = typeof params.requestId === "string" ? params.requestId.trim() : "";
+        if (!requestId) return;
+        activeHttpRequests.get(requestId)?.abort();
       },
     },
 
@@ -3414,6 +3437,9 @@ export function buildHostServices(
      */
     dispose() {
       disposed = true;
+
+      for (const controller of activeHttpRequests.values()) controller.abort();
+      activeHttpRequests.clear();
 
       // Clear event bus subscriptions to prevent accumulation on worker restart.
       // Without this, each crash/restart cycle adds duplicate subscriptions.
