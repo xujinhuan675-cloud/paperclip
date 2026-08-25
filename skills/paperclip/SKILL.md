@@ -98,6 +98,18 @@ If `currentParticipant` does not match you, do not try to advance the stage — 
 - If blocked, move the issue to `blocked` with the unblock owner and exact action needed.
 - Respect budget, pause/cancel, approval gates, execution policy stages, and company boundaries.
 
+### Verification and bounded self-repair
+
+For any task with a user-visible or machine-checkable acceptance condition, use this bounded loop:
+
+1. Execute the task, then verify both the visible result and the Paperclip control-plane facts that support it.
+2. If verification fails, classify the failure before changing anything: intent, routing, orchestration, runtime, state sync, delivery, document materialization, control plane, or environment preflight.
+3. Make the smallest repair inside the current issue and permission boundary. Do not bypass approvals, rewrite the scenario, skip the Harness, or weaken the acceptance condition.
+4. Rerun the same scenario, Harness, and assertions. Record the before/after evidence and residual risk.
+5. After two failed repair attempts, or on permissions, credentials, security, destructive data, or external-service blockers, stop and escalate with the evidence and the exact decision needed.
+
+This rule is shared execution behavior. It does not grant new permissions and does not replace the server-enforced consent gate for Reflection Coach mutations.
+
 ### Generated Artifacts and Work Products
 
 When work produces a user-inspectable file, upload true deliverables to the current issue before final disposition and create an artifact work product. Local filesystem paths are not enough because board users, reviewers, and cloud operators may not have access to the agent workspace.

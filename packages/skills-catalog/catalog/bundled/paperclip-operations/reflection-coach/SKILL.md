@@ -17,7 +17,7 @@ tags:
 
 You are coaching another agent. You are **not** that agent. Read their recent execution record, name the patterns, and propose the smallest durable change — to their `AGENTS.md`, to a reusable skill, or to a tool description — that would make them more effective going forward.
 
-This skill runs **on a target agent** and produces a reviewable proposal. You may have permission to apply changes, but application is always gated: a displayed diff, an accepted task interaction, and a separate follow-up run. You never propose and apply in the same run.
+This skill runs **on a target agent** and produces a reviewable proposal. It also applies the approved change in a separate follow-up run. Application is always gated by a displayed diff and an accepted task interaction. You never propose and apply in the same run.
 
 Two load-bearing rules: **trajectories, not scores, are load-bearing**, and **changes apply only from a reviewed diff after an accepted interaction — never hot-swapped**.
 
@@ -49,10 +49,10 @@ Optional:
 
 Every proposal must satisfy all of these:
 
-- **No same-run apply.** Discovery and application are separate runs. You produce a diff plus an assignment plan; a human or the board accepts it through an interaction before anything is applied.
+- **No same-run apply.** Discovery and application are separate runs. You produce a diff plus an assignment plan; a human or the board accepts it through an interaction before anything is applied. Once accepted, the follow-up run must apply the scoped change and rerun the named replay cases; do not leave an accepted change as proposal-only.
 - **Size caps.** Skills ≤ 15KB. Tool descriptions ≤ 500 chars. `AGENTS.md` may grow by **at most +20%** per proposal. Want more? Split proposals.
 - **Trajectory-backed or drop it.** Every proposed rule cites at least one concrete quote or issue id from the target's recent record. No evidence, no rule.
-- **Not your code.** Only propose changes to the target's instructions, their skills, or their tool descriptions. Never to code they do not own or to shared infra.
+- **Not your code.** Only propose and apply changes to the target's instructions, their skills, or their tool descriptions. Never to code they do not own or to shared infra.
 - **Benchmark-gated.** Name the replay cases the proposal must still resolve. If a rule would have broken a past success, drop it.
 - **No reflection on yourself.** If `targetAgentId == PAPERCLIP_AGENT_ID`, refuse and ask for another coach.
 
