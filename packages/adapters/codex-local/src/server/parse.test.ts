@@ -4,6 +4,7 @@ import {
   extractCodexRetryNotBefore,
   isCodexHarnessCrash,
   isCodexProviderQuotaError,
+  isCodexSuccessfulExitTransportFailure,
   isCodexTransientUpstreamError,
   isCodexUnknownSessionError,
   parseCodexJsonl,
@@ -188,6 +189,19 @@ describe("isCodexUnknownSessionError", () => {
 });
 
 describe("isCodexTransientUpstreamError", () => {
+  it("recognizes the Responses transport signature that Codex can emit on exit 0", () => {
+    expect(
+      isCodexSuccessfulExitTransportFailure(
+        "Inspecting evidence...unexpected status 503 Service Unavailable: Service temporarily unavailable, url: https://ai.flowguide.cc/responses, cf-ray: a303a50abc9c095d-HKG, request id: fae689fa-5d08-47e5-8d4d-53a98152a7c8",
+      ),
+    ).toBe(true);
+    expect(
+      isCodexSuccessfulExitTransportFailure(
+        "The upstream Responses API returned 503 during yesterday's incident; the retry is now healthy.",
+      ),
+    ).toBe(false);
+  });
+
   it("classifies the remote-compaction high-demand failure as transient upstream", () => {
     expect(
       isCodexTransientUpstreamError({

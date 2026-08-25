@@ -63,6 +63,7 @@ import {
   extractCodexRetryNotBefore,
   isCodexHarnessCrash,
   isCodexProviderQuotaError,
+  isCodexSuccessfulExitTransportFailure,
   isCodexTransientUpstreamError,
   isCodexUnknownSessionError,
 } from "./parse.js";
@@ -1457,9 +1458,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         : null;
       const parsedError = typeof attempt.parsed.errorMessage === "string" ? attempt.parsed.errorMessage.trim() : "";
       const stderrLine = firstMeaningfulStderrLine(attempt.proc.stderr);
+      const successfulExitTransportFailure =
+        (attempt.proc.exitCode ?? 0) === 0 &&
+        isCodexSuccessfulExitTransportFailure(attempt.parsed.summary);
       const fallbackErrorMessage =
         parsedError ||
         stderrLine ||
+        (successfulExitTransportFailure ? attempt.parsed.summary : "") ||
         `Codex exited with code ${attempt.proc.exitCode ?? -1}`;
       const transientRetryNotBefore =
         (attempt.proc.exitCode ?? 0) !== 0
@@ -1486,14 +1491,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           errorMessage: fallbackErrorMessage,
         });
       const transientUpstream =
-        (attempt.proc.exitCode ?? 0) !== 0 &&
+        ((attempt.proc.exitCode ?? 0) !== 0 || successfulExitTransportFailure) &&
         !authRefreshFailure &&
         !providerQuota &&
-        isCodexTransientUpstreamError({
-          stdout: attempt.proc.stdout,
-          stderr: attempt.proc.stderr,
-          errorMessage: fallbackErrorMessage,
-        });
+        (successfulExitTransportFailure ||
+          isCodexTransientUpstreamError({
+            stdout: attempt.proc.stdout,
+            stderr: attempt.proc.stderr,
+            errorMessage: fallbackErrorMessage,
+          }));
       const harnessCrash =
         !authRefreshFailure &&
         !providerQuota &&
@@ -1512,7 +1518,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         signal: attempt.proc.signal,
         timedOut: false,
         errorMessage:
-          (attempt.proc.exitCode ?? 0) === 0
+          (attempt.proc.exitCode ?? 0) === 0 && !successfulExitTransportFailure
             ? null
             : fallbackErrorMessage,
         errorCode:

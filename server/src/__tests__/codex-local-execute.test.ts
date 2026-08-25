@@ -45,6 +45,17 @@ process.exit(1);
   await fs.chmod(commandPath, 0o755);
 }
 
+async function writeSuccessfulExitTransportFailureCodexCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+console.log(JSON.stringify({ type: "thread.started", thread_id: "codex-session-transport-1" }));
+console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "Inspecting evidence...unexpected status 503 Service Unavailable: Service temporarily unavailable, url: https://ai.flowguide.cc/responses, cf-ray: a303a50abc9c095d-HKG, request id: fae689fa-5d08-47e5-8d4d-53a98152a7c8" } }));
+console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }));
+process.exit(0);
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+}
+
 type CapturePayload = {
   argv: string[];
   prompt: string;
@@ -691,6 +702,55 @@ describe("codex execute", () => {
       expect(result.errorCode).toBe("codex_transient_upstream");
       expect(result.errorFamily).toBe("transient_upstream");
       expect(result.errorMessage).toContain("high demand");
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies a Responses 503 final message as failure even when Codex exits zero", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-exit-zero-503-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fs.mkdir(workspace, { recursive: true });
+    await writeSuccessfulExitTransportFailureCodexCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    await seedSharedCodexAuth(root);
+
+    try {
+      const result = await execute({
+        runId: "run-exit-zero-503",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: { engine: "cli" },
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          engine: "cli",
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.errorCode).toBe("codex_transient_upstream");
+      expect(result.errorFamily).toBe("transient_upstream");
+      expect(result.errorMessage).toContain("unexpected status 503 Service Unavailable");
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;

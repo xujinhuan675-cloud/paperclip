@@ -7,6 +7,8 @@ import {
 
 const CODEX_TRANSIENT_UPSTREAM_RE =
   /(?:we(?:'|’)re\s+currently\s+experiencing\s+high\s+demand|temporary\s+errors|rate[-\s]?limit(?:ed)?|too\s+many\s+requests|\b429\b|server\s+overloaded|service\s+unavailable|try\s+again\s+later)/i;
+const CODEX_FINAL_RESPONSE_TRANSPORT_ERROR_RE =
+  /unexpected status (?:408|425|429|500|502|503|504)\b[^\n]{0,800}\burl:\s*https?:\/\/\S+\/responses(?:\b|[?#,])/i;
 const CODEX_REMOTE_COMPACTION_RE = /remote\s+compact\s+task/i;
 const CODEX_USAGE_LIMIT_RE =
   /you(?:'|’)ve hit your usage limit for .+\.\s+switch to another model now,\s+or try again at\s+([^.!\n]+)(?:[.!]|\n|$)/i;
@@ -95,6 +97,17 @@ export function parseCodexJsonl(stdout: string) {
     sawProtocolEvent,
     sawProtocolTerminalEvent,
   };
+}
+
+/**
+ * Some OpenAI-compatible Responses endpoints are surfaced by Codex as the
+ * final agent_message while the CLI still exits 0. This deliberately requires
+ * Codex's native `unexpected status ... url: .../responses` signature so
+ * ordinary agent prose that discusses a service outage remains successful.
+ */
+export function isCodexSuccessfulExitTransportFailure(summary: string | null | undefined): boolean {
+  const tail = summary?.trim().slice(-1_200) ?? "";
+  return CODEX_FINAL_RESPONSE_TRANSPORT_ERROR_RE.test(tail);
 }
 
 /**
