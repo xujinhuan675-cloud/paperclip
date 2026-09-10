@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 
-import { capabilityGroups, validateInventorySchema, validateInventories } from "./lib/capability-inventory.mjs";
+import {
+  capabilityGroups,
+  decodeInventory,
+  encodeInventory,
+  validateInventorySchema,
+  validateInventories,
+} from "./lib/capability-inventory.mjs";
 
 const inventorySchema = JSON.parse(await readFile(
   resolve(import.meta.dirname, "../spec/capability/inventory.schema.json"),
@@ -25,7 +31,7 @@ function row(id, group = "hb") {
 
 function validInventories() {
   const evaluations = Array.from({ length: 106 }, (_, index) => row(`eval-${index}`, capabilityGroups[index % capabilityGroups.length]));
-  const aliases = Array.from({ length: 41 }, (_, index) => ({
+  const aliases = Array.from({ length: 42 }, (_, index) => ({
     id: `mcp:tool-${index}`,
     name: `tool-${index}`,
     sourceAnchor: `source:${index + 1}`,
@@ -42,7 +48,7 @@ function validInventories() {
       schemaVersion: 2,
       inventoryRole: "normative",
       generatedFrom: ["skills/paperclip/SKILL.md"],
-      rows: Array.from({ length: 152 }, (_, index) => row(`capability-${index}`)),
+      rows: Array.from({ length: 153 }, (_, index) => row(`capability-${index}`)),
     },
     evaluations: {
       schemaVersion: 2,
@@ -59,6 +65,11 @@ function validInventories() {
     },
   };
 }
+
+test("capability inventory decoder accepts CRLF generated files", () => {
+  const inventory = { schemaVersion: 2, rows: [] };
+  assert.deepEqual(decodeInventory(encodeInventory(inventory).replace(/\n/g, "\r\n")), inventory);
+});
 
 test("capability inventory validator accepts exact baseline counts", () => {
   const inventories = validInventories();
