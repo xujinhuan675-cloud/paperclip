@@ -50,6 +50,9 @@ diagnostics/
 *.tmp
 .vscode/
 .claude/settings.local.json
+
+# Local code-graph caches can be generated below fixtures and skill snapshots.
+**/graphify-out/
 .paperclip-local/
 .paperclip-runtime/
 /.idea/
