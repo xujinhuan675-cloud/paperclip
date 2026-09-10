@@ -95,7 +95,7 @@ describe("plugin sidebar launchers", () => {
 
       const link = container.querySelector<HTMLAnchorElement>('a[href="/ARC/architecture-map"]');
       expect(link?.textContent).toContain("思维导图");
-      expect(link?.className).toContain("bg-accent");
+      expect(link?.className).toContain("bg-sidebar-accent");
       expect(link?.querySelector("svg.lucide-brain-circuit")).not.toBeNull();
 
       await act(async () => {
