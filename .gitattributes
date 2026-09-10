@@ -1,2 +1,6 @@
 patches/*.patch whitespace=-space-before-tab
 packages/paperclip-runner/protocol/**/*.json text eol=lf
+packages/paperclip-runner/generated/**/*.json text eol=lf
+packages/paperclip-runner/docs/capability-contract.md text eol=lf
+packages/paperclip-runner/spec/capability/*.yaml text eol=lf
+packages/paperclip-runner/src/generated/capability-contract.ts text eol=lf

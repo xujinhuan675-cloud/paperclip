@@ -40,8 +40,8 @@ describe("local process sandbox", () => {
 
   it("parses read-only and writable extra paths", () => {
     expect(parseLocalProcessSandboxExtraPaths(["/opt/cache", { path: "/var/lib/tool", access: "rw" }])).toEqual([
-      { path: "/opt/cache", access: "ro" },
-      { path: "/var/lib/tool", access: "rw" },
+      { path: path.resolve("/opt/cache"), access: "ro" },
+      { path: path.resolve("/var/lib/tool"), access: "rw" },
     ]);
     expect(() => parseLocalProcessSandboxExtraPaths(["relative"])).toThrow("must be an absolute path");
   });
@@ -107,7 +107,7 @@ describe("local process sandbox", () => {
     expect(binSymlink).toBeGreaterThan(usrMount);
   });
 
-  it("mounts a host-owned policy layer read-only at a fixed sandbox path", async () => {
+  it.runIf(process.platform === "linux")("mounts a host-owned policy layer read-only at a fixed sandbox path", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-workspace-"));
     const policy = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-policy-"));
     cleanup.push(workspace, policy);
@@ -132,7 +132,7 @@ describe("local process sandbox", () => {
     ]);
   });
 
-  it("rejects conflicting host-owned read-only mounts for the same target", async () => {
+  it.runIf(process.platform === "linux")("rejects conflicting host-owned read-only mounts for the same target", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-workspace-"));
     const first = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-policy-a-"));
     const second = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-sandbox-policy-b-"));
