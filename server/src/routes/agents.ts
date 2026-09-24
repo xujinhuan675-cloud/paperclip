@@ -2357,22 +2357,17 @@ export function agentRoutes(
     return record?.type === "secret_ref" && typeof record.secretId === "string";
   }
 
-  // codex_local agents inherit whatever Codex login is already on the device
-  // (the host's ~/.codex or $CODEX_HOME) by default, so a fresh agent needs no
-  // env overrides at all. We only carve out an isolated per-agent CODEX_HOME
-  // when the agent sets its own OPENAI_API_KEY, so that key's api-key auth.json
-  // does not collide with the shared company home other agents use for the host
-  // login. Agents without a key share the host credentials.
-  function applyCodexLocalKeyIsolation(
+  // Every codex_local agent gets its own managed CODEX_HOME. Authentication is
+  // still seeded from the shared host login, but Codex runtime state (including
+  // SQLite state) must never be shared between concurrent agent processes.
+  function ensureCodexLocalAgentHome(
     companyId: string,
     agentId: string,
     adapterType: string | null | undefined,
     adapterConfig: Record<string, unknown>,
   ): Record<string, unknown> {
     if (adapterType !== "codex_local") return adapterConfig;
-    const existingEnv = asRecord(adapterConfig.env);
-    if (!existingEnv) return adapterConfig;
-    if (!codexLocalEnvKeyConfigured(existingEnv.OPENAI_API_KEY)) return adapterConfig;
+    const existingEnv = asRecord(adapterConfig.env) ?? {};
     if (codexLocalEnvKeyConfigured(existingEnv.CODEX_HOME)) return adapterConfig;
     return {
       ...adapterConfig,
@@ -4098,7 +4093,7 @@ export function agentRoutes(
     );
     assertNoAgentAdapterConfigMutation(req, rawHireAdapterConfig);
     const hiredAgentId = randomUUID();
-    const requestedAdapterConfig = applyCodexLocalKeyIsolation(
+    const requestedAdapterConfig = ensureCodexLocalAgentHome(
       companyId,
       hiredAgentId,
       hireInput.adapterType,
@@ -4377,7 +4372,7 @@ export function agentRoutes(
     );
     assertNoAgentAdapterConfigMutation(req, rawCreateAdapterConfig);
     const agentId = randomUUID();
-    const requestedAdapterConfig = applyCodexLocalKeyIsolation(
+    const requestedAdapterConfig = ensureCodexLocalAgentHome(
       companyId,
       agentId,
       createInput.adapterType,
@@ -4909,7 +4904,7 @@ export function agentRoutes(
           rawEffectiveAdapterConfig,
         );
       }
-      const effectiveAdapterConfig = applyCodexLocalKeyIsolation(
+      const effectiveAdapterConfig = ensureCodexLocalAgentHome(
         existing.companyId,
         existing.id,
         requestedAdapterType,

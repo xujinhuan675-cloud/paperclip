@@ -99,7 +99,7 @@ describe("reconcileCodexLocalManagedHomesOnStartup", () => {
     await expect(fs.lstat(path.join(agentHome, "auth.json"))).rejects.toThrow();
   });
 
-  it("classifies external overrides and unconfigured homes without seeding", async () => {
+  it("classifies external overrides and seeds the isolated default for unconfigured agents", async () => {
     const external = path.join(root, "user-codex");
     await fs.mkdir(external, { recursive: true });
     const rows: AgentRow[] = [
@@ -110,14 +110,15 @@ describe("reconcileCodexLocalManagedHomesOnStartup", () => {
     const summary = await reconcileCodexLocalManagedHomesOnStartup(makeDb(rows));
     expect(summary).toMatchObject({
       scanned: 2,
-      seeded: 0,
+      seeded: 1,
       externalOverride: 1,
-      noManagedHome: 1,
+      noManagedHome: 0,
       failed: 0,
     });
     expect(await fs.access(path.join(external, "auth.json")).then(() => true).catch(() => false)).toBe(
       false,
     );
+    expect((await fs.lstat(path.join(managedAgentHome("company-1", "none"), "auth.json"))).isSymbolicLink()).toBe(true);
   });
 
   it("does not write a secret-bound OPENAI_API_KEY placeholder as the API key", async () => {

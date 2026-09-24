@@ -887,17 +887,18 @@ describe("evaluateCodexCredentialReadiness", () => {
     }
   });
 
-  it("defaults to the managed company home when no CODEX_HOME is configured", async () => {
+  it("defaults to the managed per-agent home when no CODEX_HOME is configured", async () => {
     const fx = await makeFixture();
     try {
       const result = await evaluateCodexCredentialReadiness({
         env: fx.env,
         companyId: "company-1",
+        agentId: "agent-1",
         configuredCodexHome: null,
         configuredApiKey: "",
       });
       expect(result).toMatchObject({ managed: true, authMode: "subscription", ready: false });
-      expect(result.effectiveHome).toBe(path.resolve(fx.managedCompanyHome));
+      expect(result.effectiveHome).toBe(path.resolve(fx.managedAgentHome));
     } finally {
       await fs.rm(fx.root, { recursive: true, force: true });
     }

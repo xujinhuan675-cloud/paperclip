@@ -141,6 +141,8 @@ describe("codex execute", () => {
       "default",
       "companies",
       "company-1",
+      "agents",
+      "agent-1",
       "codex-home",
     );
     await fs.mkdir(workspace, { recursive: true });
@@ -243,6 +245,8 @@ describe("codex execute", () => {
       "default",
       "companies",
       "company-1",
+      "agents",
+      "agent-1",
       "codex-home",
     );
     await fs.mkdir(workspace, { recursive: true });
@@ -1395,6 +1399,8 @@ process.exit(1);
       "worktree-1",
       "companies",
       "company-1",
+      "agents",
+      "agent-1",
       "codex-home",
     );
     const homeSkill = path.join(isolatedCodexHome, "skills", "paperclip");
@@ -1564,7 +1570,20 @@ process.exit(1);
       const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
       expect(capture.codexHome).toBe(explicitCodexHome);
       expect((await fs.lstat(path.join(explicitCodexHome, "skills", "paperclip"))).isSymbolicLink()).toBe(true);
-      await expect(fs.lstat(path.join(paperclipHome, "instances", "worktree-1", "codex-home"))).rejects.toThrow();
+      await expect(
+        fs.lstat(
+          path.join(
+            paperclipHome,
+            "instances",
+            "worktree-1",
+            "companies",
+            "company-1",
+            "agents",
+            "agent-1",
+            "codex-home",
+          ),
+        ),
+      ).rejects.toThrow();
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;

@@ -1251,12 +1251,12 @@ describe("shared ACPX engine runtime behavior", () => {
     expect(await pathExists(path.join(skillsHome, legacy.runtimeName))).toBe(false);
   });
 
-  it.skipIf(process.platform === "win32")("replaces stale managed Codex auth files with source symlinks", async () => {
+  it("uses a per-agent ACPX Codex home and prefers promoted company credentials", async () => {
     const root = await makeTempRoot();
     const sourceCodexHome = path.join(root, "source-codex-home");
     const paperclipHome = path.join(root, "paperclip-home");
     const paperclipInstanceId = "test-instance";
-    const managedCodexHome = path.join(
+    const companyCodexHome = path.join(
       paperclipHome,
       "instances",
       paperclipInstanceId,
@@ -1264,12 +1264,24 @@ describe("shared ACPX engine runtime behavior", () => {
       "company-1",
       "codex-home",
     );
+    const managedCodexHome = path.join(
+      paperclipHome,
+      "instances",
+      paperclipInstanceId,
+      "companies",
+      "company-1",
+      "agents",
+      "agent-1",
+      "codex-home",
+    );
     await fs.mkdir(sourceCodexHome, { recursive: true });
-    await fs.mkdir(managedCodexHome, { recursive: true });
+    await fs.mkdir(companyCodexHome, { recursive: true });
     const sourceAuth = path.join(sourceCodexHome, "auth.json");
+    const promotedAuth = path.join(companyCodexHome, "auth.json");
     const managedAuth = path.join(managedCodexHome, "auth.json");
     await fs.writeFile(sourceAuth, "{\"source\":true}", "utf8");
-    await fs.writeFile(managedAuth, "{\"stale\":true}", "utf8");
+    await fs.writeFile(promotedAuth, "{\"promoted\":true}", "utf8");
+    await fs.writeFile(path.join(sourceCodexHome, "config.toml"), 'model = "gpt-5"\n', "utf8");
 
     const previousCodexHome = process.env.CODEX_HOME;
     const previousPaperclipHome = process.env.PAPERCLIP_HOME;
@@ -1278,6 +1290,56 @@ describe("shared ACPX engine runtime behavior", () => {
       process.env.CODEX_HOME = sourceCodexHome;
       process.env.PAPERCLIP_HOME = paperclipHome;
       process.env.PAPERCLIP_INSTANCE_ID = paperclipInstanceId;
+      const run = await runExecutor({
+        agent: "codex",
+        stateDir: path.join(root, "state"),
+        paperclipRuntimeSkills: [],
+        paperclipSkillSync: { desiredSkills: [] },
+      });
+      const sessionEnv = (run.sessionInputs[0]?.sessionOptions as { env: Record<string, string> })
+        .env;
+      expect(sessionEnv.CODEX_HOME).toBe(managedCodexHome);
+    } finally {
+      if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previousCodexHome;
+      if (previousPaperclipHome === undefined) delete process.env.PAPERCLIP_HOME;
+      else process.env.PAPERCLIP_HOME = previousPaperclipHome;
+      if (previousPaperclipInstanceId === undefined) delete process.env.PAPERCLIP_INSTANCE_ID;
+      else process.env.PAPERCLIP_INSTANCE_ID = previousPaperclipInstanceId;
+    }
+
+    expect(await fs.readFile(managedAuth, "utf8")).toBe("{\"promoted\":true}");
+    expect(await fs.readFile(path.join(managedCodexHome, "config.toml"), "utf8")).toBe(
+      'model = "gpt-5"\n',
+    );
+  });
+
+  it("preserves an existing per-agent ACPX auth file", async () => {
+    const root = await makeTempRoot();
+    const sourceCodexHome = path.join(root, "source-codex-home");
+    const paperclipHome = path.join(root, "paperclip-home");
+    const managedCodexHome = path.join(
+      paperclipHome,
+      "instances",
+      "test-instance",
+      "companies",
+      "company-1",
+      "agents",
+      "agent-1",
+      "codex-home",
+    );
+    await fs.mkdir(sourceCodexHome, { recursive: true });
+    await fs.mkdir(managedCodexHome, { recursive: true });
+    await fs.writeFile(path.join(sourceCodexHome, "auth.json"), "{\"shared\":true}", "utf8");
+    await fs.writeFile(path.join(managedCodexHome, "auth.json"), "{\"agent\":true}", "utf8");
+
+    const previousCodexHome = process.env.CODEX_HOME;
+    const previousPaperclipHome = process.env.PAPERCLIP_HOME;
+    const previousPaperclipInstanceId = process.env.PAPERCLIP_INSTANCE_ID;
+    try {
+      process.env.CODEX_HOME = sourceCodexHome;
+      process.env.PAPERCLIP_HOME = paperclipHome;
+      process.env.PAPERCLIP_INSTANCE_ID = "test-instance";
       await runExecutor({
         agent: "codex",
         stateDir: path.join(root, "state"),
@@ -1293,9 +1355,9 @@ describe("shared ACPX engine runtime behavior", () => {
       else process.env.PAPERCLIP_INSTANCE_ID = previousPaperclipInstanceId;
     }
 
-    const authStat = await fs.lstat(managedAuth);
-    expect(authStat.isSymbolicLink()).toBe(true);
-    expect(path.resolve(path.dirname(managedAuth), await fs.readlink(managedAuth))).toBe(sourceAuth);
+    expect(await fs.readFile(path.join(managedCodexHome, "auth.json"), "utf8")).toBe(
+      "{\"agent\":true}",
+    );
   });
 
   it("sets GROK_HOME for a Grok run from the company Grok home, and leaves CODEX_HOME unchanged for a Codex run", async () => {

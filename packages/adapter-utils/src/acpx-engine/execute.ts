@@ -769,6 +769,28 @@ function resolveManagedCodexHomeDir(companyId: string): string {
   return path.join(defaultPaperclipInstanceDir(), "companies", companyId, "codex-home");
 }
 
+function resolveManagedCodexAgentHomeDir(companyId: string, agentId: string): string {
+  return path.join(
+    defaultPaperclipInstanceDir(),
+    "companies",
+    companyId,
+    "agents",
+    agentId,
+    "codex-home",
+  );
+}
+
+function isManagedCodexHomePath(candidate: string, companyId: string): boolean {
+  const companyRoot = path.join(defaultPaperclipInstanceDir(), "companies", companyId);
+  const relative = path.relative(companyRoot, path.resolve(candidate));
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
 // Mirrors `resolveManagedGrokHomeDir` in
 // `packages/adapters/grok-local/src/server/grok-home.ts` — this package
 // cannot import that adapter package (it would invert the dependency
@@ -960,18 +982,29 @@ async function ensureCopiedFile(target: string, source: string): Promise<void> {
 }
 
 async function prepareManagedCodexHome(input: {
-  companyId: string;
   sourceHome: string;
+  credentialHome: string;
   targetHome: string;
   onLog: AdapterExecutionContext["onLog"];
 }): Promise<string> {
-  const { sourceHome, targetHome, onLog } = input;
+  const { sourceHome, credentialHome, targetHome, onLog } = input;
   if (path.resolve(sourceHome) === path.resolve(targetHome)) return targetHome;
 
   await fs.mkdir(targetHome, { recursive: true });
 
-  const authJson = path.join(sourceHome, "auth.json");
-  if (await pathExists(authJson)) await ensureSymlink(path.join(targetHome, "auth.json"), authJson);
+  const promotedAuthJson = path.join(credentialHome, "auth.json");
+  const sharedAuthJson = path.join(sourceHome, "auth.json");
+  const authJson = await pathExists(promotedAuthJson) ? promotedAuthJson : sharedAuthJson;
+  const targetAuthJson = path.join(targetHome, "auth.json");
+  const targetAuthStat = await fs.lstat(targetAuthJson).catch(() => null);
+  if (await pathExists(authJson)) {
+    // Preserve a regular per-agent auth.json written from an agent-specific API
+    // key. Missing or stale symlinks are refreshed from the promoted company
+    // login first, then the host's shared Codex login.
+    if (!targetAuthStat || targetAuthStat.isSymbolicLink()) {
+      await ensureSymlink(targetAuthJson, authJson);
+    }
+  }
 
   for (const name of ["config.json", "config.toml", "instructions.md"]) {
     const source = path.join(sourceHome, name);
@@ -980,7 +1013,7 @@ async function prepareManagedCodexHome(input: {
 
   await onLog(
     "stdout",
-    `[paperclip] Using Paperclip-managed ACPX Codex home "${targetHome}" (seeded from "${sourceHome}").\n`,
+    `[paperclip] Using Paperclip-managed ACPX Codex home "${targetHome}" (credentials from "${path.dirname(authJson)}").\n`,
   );
   return targetHome;
 }
@@ -1188,6 +1221,7 @@ async function reconcileManagedCodexSkills(input: {
 
 async function prepareCodexSkillRuntime(input: {
   companyId: string;
+  agentId: string;
   config: Record<string, unknown>;
   env: Record<string, string>;
   moduleDir: string;
@@ -1215,14 +1249,20 @@ async function prepareCodexSkillRuntime(input: {
     typeof process.env.CODEX_HOME === "string" && process.env.CODEX_HOME.trim().length > 0
       ? path.resolve(process.env.CODEX_HOME.trim())
       : path.join(os.homedir(), ".codex");
-  const managedCodexHome = resolveManagedCodexHomeDir(input.companyId);
-  const effectiveCodexHome = configuredCodexHome ??
-    await prepareManagedCodexHome({
-      companyId: input.companyId,
-      sourceHome: sourceCodexHome,
-      targetHome: managedCodexHome,
-      onLog: input.onLog,
-    });
+  const companyCodexHome = resolveManagedCodexHomeDir(input.companyId);
+  const managedCodexHome = resolveManagedCodexAgentHomeDir(input.companyId, input.agentId);
+  const configuredHomeIsManaged =
+    configuredCodexHome != null &&
+    isManagedCodexHomePath(configuredCodexHome, input.companyId);
+  const managedTargetHome = configuredHomeIsManaged ? configuredCodexHome : managedCodexHome;
+  const effectiveCodexHome = configuredHomeIsManaged || configuredCodexHome == null
+    ? await prepareManagedCodexHome({
+        sourceHome: sourceCodexHome,
+        credentialHome: companyCodexHome,
+        targetHome: managedTargetHome,
+        onLog: input.onLog,
+      })
+    : configuredCodexHome;
   const { allSkills, selectedSkills, desiredSkillNames } = await resolveSelectedRuntimeSkills(input.config, input.moduleDir);
   const skillSetKey = await buildSkillSetKey({ skills: selectedSkills, label: "codex" });
   const skillsHome = path.join(effectiveCodexHome, "skills");
@@ -1974,6 +2014,7 @@ async function buildRuntime(input: {
     const preparedSkills = await measureStartupStep(input.ctx, nowMs, "codex-home.seed", () =>
       prepareCodexSkillRuntime({
         companyId: agent.companyId,
+        agentId: agent.id,
         config,
         env,
         moduleDir: input.engine.moduleDir,

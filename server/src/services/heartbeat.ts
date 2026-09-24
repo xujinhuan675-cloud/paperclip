@@ -1663,6 +1663,7 @@ export async function resolveExecutionRunAdapterConfig(input: {
     const readiness = await evaluateCodexCredentialReadiness({
       env: process.env,
       companyId: input.companyId,
+      agentId: input.agentId,
       configuredCodexHome: readNonEmptyString(resolvedEnv.CODEX_HOME),
       configuredApiKey: readNonEmptyString(resolvedEnv.OPENAI_API_KEY),
     });

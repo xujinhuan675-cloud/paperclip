@@ -1,6 +1,9 @@
 import type { Db } from "@paperclipai/db";
 import { agents } from "@paperclipai/db";
-import { reconcileManagedCodexHome } from "@paperclipai/adapter-codex-local/server";
+import {
+  reconcileManagedCodexHome,
+  resolveManagedCodexAgentHomeDir,
+} from "@paperclipai/adapter-codex-local/server";
 import { eq } from "drizzle-orm";
 import { logger } from "../middleware/logger.js";
 
@@ -97,7 +100,9 @@ export async function reconcileCodexLocalManagedHomesOnStartup(
   for (const row of rows) {
     summary.scanned += 1;
     const env = asRecord(asRecord(row.adapterConfig)?.env);
-    const configuredCodexHome = env ? readPlainEnvValue(env.CODEX_HOME) : null;
+    const configuredCodexHome =
+      (env ? readPlainEnvValue(env.CODEX_HOME) : null)
+      ?? resolveManagedCodexAgentHomeDir(process.env, row.companyId, row.id);
     const apiKeyBinding = classifyApiKeyBinding(env?.OPENAI_API_KEY);
 
     try {

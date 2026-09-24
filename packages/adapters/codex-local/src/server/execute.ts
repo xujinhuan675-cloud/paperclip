@@ -72,8 +72,7 @@ import {
   evaluateCodexCredentialReadiness,
   isManagedCodexHomePath,
   pathExists,
-  prepareManagedCodexHome,
-  resolveManagedCodexHomeDir,
+  resolveManagedCodexAgentHomeDir,
   resolveSharedCodexHomeDir,
   seedManagedCodexHome,
   stageCodexHomeForSync,
@@ -383,6 +382,7 @@ async function sandboxCodexAuthJsonExists(input: {
 export async function assertCodexCredentialsLaunchable(input: {
   runId: string;
   companyId: string;
+  agentId?: string | null;
   configuredCodexHome: string | null;
   configuredApiKey: string | null;
   effectiveCodexHome: string;
@@ -394,6 +394,7 @@ export async function assertCodexCredentialsLaunchable(input: {
   const credentialReadiness = await evaluateCodexCredentialReadiness({
     env: input.env ?? process.env,
     companyId: input.companyId,
+    agentId: input.agentId,
     configuredCodexHome: input.configuredCodexHome,
     configuredApiKey: input.configuredApiKey,
   });
@@ -685,8 +686,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       void error;
     });
   }
+  const defaultCodexHome = resolveManagedCodexAgentHomeDir(
+    process.env,
+    agent.companyId,
+    agent.id,
+  );
   if (configuredCodexHome == null) {
-    await prepareManagedCodexHome(process.env, onLog, agent.companyId, {
+    await seedManagedCodexHome(defaultCodexHome, process.env, onLog, {
       apiKey: configuredOpenAiApiKey,
     });
   } else if (configuredHomeIsManaged) {
@@ -694,7 +700,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       apiKey: configuredOpenAiApiKey,
     });
   }
-  const defaultCodexHome = resolveManagedCodexHomeDir(process.env, agent.companyId);
   const effectiveCodexHome = configuredCodexHome ?? defaultCodexHome;
   await fs.mkdir(effectiveCodexHome, { recursive: true });
 
@@ -711,6 +716,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   await assertCodexCredentialsLaunchable({
     runId,
     companyId: agent.companyId,
+    agentId: agent.id,
     configuredCodexHome,
     configuredApiKey: configuredOpenAiApiKey,
     effectiveCodexHome,
