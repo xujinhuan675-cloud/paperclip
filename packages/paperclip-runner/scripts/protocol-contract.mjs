@@ -18,7 +18,10 @@ function contractError(code, detail) {
 }
 
 export async function readJson(path) {
-  const source = await readFile(path, "utf8");
+  // Manifest hashes describe the logical JSON contract, not the checkout's
+  // platform-specific line endings. Normalize CRLF/CR to LF so a manifest
+  // generated on Windows is identical to the one checked in by Linux CI.
+  const source = (await readFile(path, "utf8")).replace(/\r\n?/g, "\n");
   try {
     return { source, value: JSON.parse(source) };
   } catch (error) {

@@ -37,6 +37,20 @@ test("the generated manifest matches all checked-in schemas and fixtures", async
   assert.equal(actual, expected);
 });
 
+test("protocol contract hashes are independent of Windows line endings", async () => {
+  const source = await readFile(resolve(protocolRoot, "schemas", "capabilities.schema.json"), "utf8");
+  const normalized = source.replace(/\r\n?/g, "\n");
+  const windowsSource = normalized.replace(/\n/g, "\r\n");
+  const manifest = await buildProtocolManifest();
+  const entry = manifest.schemas.find((record) => record.path === "schemas/capabilities.schema.json");
+  assert.ok(entry);
+  assert.equal(entry.sha256, createHash("sha256").update(normalized).digest("hex"));
+  assert.equal(
+    createHash("sha256").update(windowsSource.replace(/\r\n?/g, "\n")).digest("hex"),
+    entry.sha256,
+  );
+});
+
 test("canonical replay fixtures use supported required versions", async () => {
   for (const name of [
     "duplicate-event.json",
