@@ -571,6 +571,35 @@ async function columnHasDataType(
   ));
 }
 
+function normalizeSqlExpression(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^\((.*)\)$/s, "$1")
+    .replace(/::text\b/gi, "")
+    .replace(/;$/, "")
+    .trim()
+    .toLowerCase();
+}
+
+async function columnHasDefault(
+  sql: ReturnType<typeof postgres>,
+  tableName: string,
+  columnName: string,
+  defaultExpression: string,
+): Promise<boolean> {
+  const rows = await sql<{ columnDefault: string | null }[]>`
+    SELECT column_default AS "columnDefault"
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${tableName}
+      AND column_name = ${columnName}
+  `;
+  const columnDefault = rows[0]?.columnDefault;
+  return columnDefault !== null
+    && columnDefault !== undefined
+    && normalizeSqlExpression(columnDefault) === normalizeSqlExpression(defaultExpression);
+}
+
 async function indexExists(
   sql: ReturnType<typeof postgres>,
   indexName: string,
@@ -586,6 +615,29 @@ async function indexExists(
     ) AS exists
   `;
   return rows[0]?.exists ?? false;
+}
+
+function normalizeIndexColumns(value: string): string {
+  return value.replace(/["\s]/g, "").toLowerCase();
+}
+
+async function equivalentIndexExists(
+  sql: ReturnType<typeof postgres>,
+  tableName: string,
+  columns: string,
+): Promise<boolean> {
+  // A later migration may intentionally replace a legacy index with a unique one.
+  const rows = await sql<{ indexDefinition: string }[]>`
+    SELECT indexdef AS "indexDefinition"
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = ${tableName}
+  `;
+  const expectedColumns = normalizeIndexColumns(columns);
+  return rows.some((row) => {
+    const match = row.indexDefinition.match(/\(([^()]*)\)\s*$/);
+    return match !== null && normalizeIndexColumns(match[1]) === expectedColumns;
+  });
 }
 
 async function constraintExists(
@@ -702,9 +754,28 @@ async function migrationStatementAlreadyApplied(
     );
   }
 
+  const alterColumnDefaultMatch = normalized.match(
+    /^ALTER TABLE "([^"]+)" ALTER COLUMN "([^"]+)" SET DEFAULT (.+)$/i,
+  );
+  if (alterColumnDefaultMatch) {
+    return columnHasDefault(
+      sql,
+      alterColumnDefaultMatch[1],
+      alterColumnDefaultMatch[2],
+      alterColumnDefaultMatch[3],
+    );
+  }
+
   const createIndexMatch = normalized.match(/^CREATE (?:UNIQUE )?INDEX(?: IF NOT EXISTS)? "([^"]+)"/i);
   if (createIndexMatch) {
-    return indexExists(sql, createIndexMatch[1]);
+    if (await indexExists(sql, createIndexMatch[1])) return true;
+
+    const equivalentIndexMatch = normalized.match(
+      /^CREATE (?:UNIQUE )?INDEX(?: IF NOT EXISTS)? "[^"]+" ON "([^"]+)"(?: USING [A-Za-z0-9_]+)? \(([^)]+)\)/i,
+    );
+    return equivalentIndexMatch
+      ? equivalentIndexExists(sql, equivalentIndexMatch[1], equivalentIndexMatch[2])
+      : false;
   }
 
   const addConstraintMatch = normalized.match(/^ALTER TABLE "([^"]+)" ADD CONSTRAINT "([^"]+)"/i);

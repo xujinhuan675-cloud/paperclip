@@ -168,6 +168,26 @@ describeEmbeddedPostgres("resetPostgresDatabase", () => {
 });
 
 describeEmbeddedPostgres("applyPendingMigrations", () => {
+  it("reconciles migration 0001 when its schema is already applied", async () => {
+    const connectionString = await createTempDatabase();
+
+    await applyPendingMigrations(connectionString);
+
+    const sql = postgres(connectionString, { max: 1, onnotice: () => {} });
+    try {
+      const migrationHashValue = await migrationHash("0001_fast_northstar.sql");
+      await sql.unsafe(
+        `DELETE FROM "drizzle"."__drizzle_migrations" WHERE hash = '${migrationHashValue}'`,
+      );
+    } finally {
+      await sql.end();
+    }
+
+    await applyPendingMigrations(connectionString);
+
+    expect((await inspectMigrations(connectionString)).status).toBe("upToDate");
+  }, 30_000);
+
   it("upgrades renumbered recovery migrations and replays their schema idempotently", async () => {
     const connectionString = await createTempDatabase();
     await applyPendingMigrations(connectionString);
