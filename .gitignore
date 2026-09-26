@@ -82,3 +82,6 @@ test-results/
 
 # Retained local lifecycle behavior measurements
 .lifecycle-baseline/
+
+# Local code-graph output (may appear recursively in fixtures and packages)
+**/graphify-out/

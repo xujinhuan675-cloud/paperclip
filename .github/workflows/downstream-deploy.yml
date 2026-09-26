@@ -1,0 +1,104 @@
+name: Deploy Downstream Paperclip
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: Optional GHCR tag or digest; defaults to this commit's sha-<short> image
+        required: false
+        type: string
+      paperclip_commit:
+        description: Optional full commit SHA represented by the image
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paperclip-downstream-production
+  cancel-in-progress: false
+
+env:
+  REMOTE_DIR: /opt/paperclip-feishu-bridge-compose-20260804
+  COMPOSE_PROJECT: paperclip-feishu-bridge-prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Paperclip
+        uses: actions/checkout@v7
+
+      - name: Resolve Paperclip image metadata
+        id: metadata
+        shell: bash
+        env:
+          REQUESTED_IMAGE_REF: ${{ inputs.image_ref }}
+          REQUESTED_PAPERCLIP_COMMIT: ${{ inputs.paperclip_commit }}
+        run: |
+          set -eu
+          commit="$REQUESTED_PAPERCLIP_COMMIT"
+          if [ -z "$commit" ]; then
+            commit="$(git rev-parse HEAD)"
+          fi
+          case "$commit" in
+            *[!0-9a-f]*|'') echo "paperclip_commit must be a hexadecimal commit SHA" >&2; exit 2 ;;
+          esac
+          short_commit="$(printf '%s' "$commit" | cut -c1-7)"
+          image_ref="$REQUESTED_IMAGE_REF"
+          if [ -z "$image_ref" ]; then
+            image_ref="ghcr.io/${GITHUB_REPOSITORY}:sha-${short_commit}"
+          fi
+          case "$image_ref" in
+            ghcr.io/*:*) ;;
+            *) echo "image_ref must point to a tagged ghcr.io image" >&2; exit 2 ;;
+          esac
+          case "$image_ref" in
+            *[!A-Za-z0-9._:/@-]*) echo "image_ref contains unsafe characters" >&2; exit 2 ;;
+          esac
+          paperclip_version="$(node -p 'require("./package.json").version || "source"')"
+          {
+            printf 'image_ref=%s\n' "$image_ref"
+            printf 'paperclip_commit=%s\n' "$commit"
+            printf 'paperclip_version=%s\n' "$paperclip_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate downstream deployment boundary
+        shell: bash
+        run: |
+          set -eu
+          bash -n scripts/downstream-registry-deploy.sh
+          node --test scripts/downstream-registry-deploy.test.mjs
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Pull image and restart Paperclip on the server
+        env:
+          PAPERCLIP_IMAGE_REF: ${{ steps.metadata.outputs.image_ref }}
+          PAPERCLIP_BUILD_VERSION: ${{ steps.metadata.outputs.paperclip_version }}
+          PAPERCLIP_BUILD_COMMIT: ${{ steps.metadata.outputs.paperclip_commit }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        shell: bash
+        run: |
+          set -eu
+          ssh_args=(
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=120
+            -o TCPKeepAlive=yes
+            -p "${DEPLOY_SSH_PORT:-22}"
+          )
+          remote="${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
+          ssh "${ssh_args[@]}" "$remote" \
+            "PAPERCLIP_IMAGE_REF='$PAPERCLIP_IMAGE_REF' RUN_ID='$RUN_ID' REMOTE_DIR='${{ env.REMOTE_DIR }}' COMPOSE_PROJECT='${{ env.COMPOSE_PROJECT }}' PAPERCLIP_BUILD_VERSION='$PAPERCLIP_BUILD_VERSION' PAPERCLIP_BUILD_COMMIT='$PAPERCLIP_BUILD_COMMIT' bash -s" \
+            < scripts/downstream-registry-deploy.sh
