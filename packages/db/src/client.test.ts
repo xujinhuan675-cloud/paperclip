@@ -188,6 +188,48 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
     expect((await inspectMigrations(connectionString)).status).toBe("upToDate");
   }, 30_000);
 
+  it("finishes a partially applied migration without replaying existing columns", async () => {
+    const connectionString = await createTempDatabase();
+
+    await applyPendingMigrations(connectionString);
+
+    const sql = postgres(connectionString, { max: 1, onnotice: () => {} });
+    try {
+      const migrationHashValue = await migrationHash("0003_shallow_quentin_quire.sql");
+      await sql`DELETE FROM "drizzle"."__drizzle_migrations" WHERE hash = ${migrationHashValue}`;
+      await sql`ALTER TABLE "activity_log" DROP CONSTRAINT "activity_log_run_id_heartbeat_runs_id_fk"`;
+      await sql`DROP INDEX "activity_log_run_id_idx"`;
+
+      await applyPendingMigrations(connectionString);
+
+      const columns = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'activity_log'
+          AND column_name = 'run_id'
+      `;
+      const constraints = await sql`
+        SELECT conname
+        FROM pg_constraint
+        WHERE conname = 'activity_log_run_id_heartbeat_runs_id_fk'
+      `;
+      const indexes = await sql`
+        SELECT indexname
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND indexname = 'activity_log_run_id_idx'
+      `;
+
+      expect(columns).toHaveLength(1);
+      expect(constraints).toHaveLength(1);
+      expect(indexes).toHaveLength(1);
+      expect((await inspectMigrations(connectionString)).status).toBe("upToDate");
+    } finally {
+      await sql.end();
+    }
+  }, 30_000);
+
   it("upgrades renumbered recovery migrations and replays their schema idempotently", async () => {
     const connectionString = await createTempDatabase();
     await applyPendingMigrations(connectionString);

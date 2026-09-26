@@ -473,6 +473,9 @@ async function applyPendingMigrationsManually(
 
       await runInTransaction(sql, async () => {
         for (const statement of splitMigrationStatements(migrationContent)) {
+          // Restored databases can contain a partially applied migration:
+          // keep existing schema objects and finish only the missing steps.
+          if (await migrationStatementAlreadyApplied(sql, statement)) continue;
           await sql.unsafe(statement);
         }
 
@@ -740,6 +743,13 @@ async function migrationStatementAlreadyApplied(
   );
   if (addColumnMatch) {
     return columnExists(sql, addColumnMatch[1], addColumnMatch[2]);
+  }
+
+  const dropColumnMatch = normalized.match(
+    /^ALTER TABLE "([^"]+)" DROP COLUMN(?: IF EXISTS)? "([^"]+)"/i,
+  );
+  if (dropColumnMatch) {
+    return !(await columnExists(sql, dropColumnMatch[1], dropColumnMatch[2]));
   }
 
   const alterColumnTypeMatch = normalized.match(
