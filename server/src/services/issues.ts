@@ -106,6 +106,7 @@ import { conflict, HttpError, notFound, unprocessable } from "../errors.js";
 import { isForeignKeyViolation } from "../db-errors.js";
 import { logger } from "../middleware/logger.js";
 import { parseObject } from "../adapters/utils.js";
+import { detectLikelyTextEncodingCorruption } from "../lib/text-encoding.js";
 import {
   hydrateSuccessfulRunHandoffLiveness,
   SUCCESSFUL_RUN_HANDOFF_LIVE_WAKE_STATUSES,
@@ -2067,6 +2068,28 @@ function escapeLikePattern(value: string): string {
 
 export function clampIssueListLimit(limit: number): number {
   return Math.min(ISSUE_LIST_MAX_LIMIT, Math.max(1, Math.floor(limit)));
+}
+
+function assertTextNotEncodingCorrupted(field: string, value: unknown) {
+  const corruption = detectLikelyTextEncodingCorruption(value);
+  if (!corruption) return;
+  logger.warn({ field, corruption }, "rejected likely encoding-corrupted issue text");
+  throw unprocessable(
+    `${field} appears to be encoding-corrupted. Send JSON as UTF-8 and set Content-Type to application/json; charset=utf-8.`,
+    { field, corruption },
+  );
+}
+
+function assertIssueTextNotEncodingCorrupted(data: {
+  title?: unknown;
+  description?: unknown;
+  body?: unknown;
+  comment?: unknown;
+}) {
+  assertTextNotEncodingCorrupted("title", data.title);
+  assertTextNotEncodingCorrupted("description", data.description);
+  assertTextNotEncodingCorrupted("body", data.body);
+  assertTextNotEncodingCorrupted("comment", data.comment);
 }
 
 function chunkList<T>(values: T[], size: number): T[][] {
@@ -9706,6 +9729,10 @@ export function issueService(db: Db) {
       data: IssueCreateInput,
       dbOrTx: Db | DbTransaction = db,
     ) => {
+      assertIssueTextNotEncodingCorrupted({
+        title: data.title,
+        description: data.description,
+      });
       const {
         initialPlan,
         labelIds: inputLabelIds,
@@ -10562,6 +10589,10 @@ export function issueService(db: Db) {
         data.companyGuard !== undefined
           ? and(eq(issues.id, id), eq(issues.companyId, data.companyGuard))
           : eq(issues.id, id);
+      assertIssueTextNotEncodingCorrupted({
+        title: data.title,
+        description: data.description,
+      });
       const existing = await dbOrTx
         .select()
         .from(issues)
@@ -12120,6 +12151,7 @@ export function issueService(db: Db) {
       if (actor.userId && dbOrTx !== db) {
         await dbOrTx.select({ id: issues.id }).from(issues).where(eq(issues.id, issueId)).for("update");
       }
+      assertIssueTextNotEncodingCorrupted({ body });
       const issue = await dbOrTx
         .select({ companyId: issues.companyId, conversationAgentId: issues.conversationAgentId })
         .from(issues)
