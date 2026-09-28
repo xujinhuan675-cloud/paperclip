@@ -19,11 +19,11 @@ export function legacyControllerClaim(runtimeMode: string) {
   };
 }
 
-export async function renewLegacyControllerLease(
+async function renewLegacyControllerLeaseUntil(
   db: Db,
   run: Pick<Run, "id" | "companyId" | "controllerBootId">,
   stage?: "dispatching",
-): Promise<boolean> {
+): Promise<Date | null> {
   const [renewed] = await db.update(heartbeatRuns).set({
     controllerLeaseExpiresAt: sql`clock_timestamp() + interval '60 seconds'`,
     ...(stage ? { executionStage: stage } : {}),
@@ -32,8 +32,16 @@ export async function renewLegacyControllerLease(
     eq(heartbeatRuns.runtimeMode, "legacy"), eq(heartbeatRuns.status, "running"),
     eq(heartbeatRuns.controllerBootId, legacyControllerBootId),
     gt(heartbeatRuns.controllerLeaseExpiresAt, sql`clock_timestamp()`),
-  )).returning({ id: heartbeatRuns.id });
-  return Boolean(renewed);
+  )).returning({ controllerLeaseExpiresAt: heartbeatRuns.controllerLeaseExpiresAt });
+  return renewed?.controllerLeaseExpiresAt ?? null;
+}
+
+export async function renewLegacyControllerLease(
+  db: Db,
+  run: Pick<Run, "id" | "companyId" | "controllerBootId">,
+  stage?: "dispatching",
+): Promise<boolean> {
+  return (await renewLegacyControllerLeaseUntil(db, run, stage)) !== null;
 }
 
 export async function hasLiveLegacyController(db: Db, run: Run): Promise<boolean> {
@@ -77,27 +85,27 @@ export function watchLegacyControllerLease(db: Db, run: Run, controller: AbortCo
   const assertOwned = async (stage?: "dispatching") => {
     if (stopped) return;
     controller.signal.throwIfAborted();
-    const startedAt = Date.now();
     let onAbort!: () => void;
     const aborted = new Promise<never>((_, reject) => {
       onAbort = () => reject(controller.signal.reason);
       controller.signal.addEventListener("abort", onAbort, { once: true });
     });
-    let renewed: boolean;
+    let renewedUntil: Date | null;
     try {
-      renewed = await Promise.race([renewLegacyControllerLease(db, run, stage), aborted]);
+      renewedUntil = await Promise.race([renewLegacyControllerLeaseUntil(db, run, stage), aborted]);
     } finally {
       controller.signal.removeEventListener("abort", onAbort);
     }
     if (stopped) return;
-    if (!renewed) {
+    if (!renewedUntil) {
       lost();
       controller.signal.throwIfAborted();
+      return;
     }
     controller.signal.throwIfAborted();
     if (!stopped) {
       clearTimeout(deadline);
-      deadline = setTimeout(lost, Math.max(0, LEGACY_CONTROLLER_LEASE_MS - (Date.now() - startedAt)));
+      deadline = setTimeout(lost, Math.max(0, renewedUntil.getTime() - Date.now()));
       deadline.unref();
     }
   };

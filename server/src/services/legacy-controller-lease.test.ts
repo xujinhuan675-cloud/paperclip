@@ -114,6 +114,42 @@ const support = await getEmbeddedPostgresTestSupport();
     } finally { watch.stop(); vi.useRealTimers(); }
   });
 
+  it("keeps the database-confirmed lease window after a slow renewal", async () => {
+    const run = await seed();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T00:00:00.000Z"));
+    let renewalCount = 0;
+    const slowDb = {
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: () => {
+              renewalCount += 1;
+              if (renewalCount > 1) return new Promise(() => {});
+              return new Promise((resolve) => setTimeout(() => resolve([{
+                controllerLeaseExpiresAt: new Date(Date.now() + 60_000),
+              }]), 8_000));
+            },
+          }),
+        }),
+      }),
+    } as unknown as typeof db;
+    const controller = new AbortController();
+    const watch = watchLegacyControllerLease(slowDb, {
+      ...run,
+      controllerLeaseExpiresAt: new Date(Date.now() + 60_000),
+    }, controller);
+    try {
+      const renewed = watch.assertOwned("dispatching");
+      await vi.advanceTimersByTimeAsync(8_000);
+      await renewed;
+      await vi.advanceTimersByTimeAsync(53_000);
+      expect(controller.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(controller.signal.aborted).toBe(true);
+    } finally { watch.stop(); vi.useRealTimers(); }
+  });
+
   it("leaves native controller ownership to the native coordinator", () => {
     expect(legacyControllerClaim("native")).toEqual({});
   });
