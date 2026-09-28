@@ -1111,7 +1111,7 @@ function readInlineSkillImports(companyId: string, files: Record<string, string>
 async function walkLocalFiles(root: string, current: string, out: string[]) {
   const entries = await fs.readdir(current, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name === ".git" || entry.name === "node_modules") continue;
+    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "graphify-out") continue;
     const absolutePath = path.join(current, entry.name);
     if (entry.isDirectory()) {
       await walkLocalFiles(root, absolutePath, out);

@@ -1963,6 +1963,36 @@ describeEmbeddedPostgres("companySkillService.list", () => {
     ]));
   });
 
+  it("excludes generated graphify indexes from local skill inventories", async () => {
+    const companyId = randomUUID();
+    const packageDir = await createManagedSkillDir(companyId, "graphify-exclusion-package-");
+    const skillDir = path.join(packageDir, "skills", "graphify-exclusion-skill");
+    await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
+    await fs.mkdir(path.join(skillDir, "graphify-out"), { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: Graphify Exclusion Skill\n---\n\n# Graphify Exclusion Skill\n",
+      "utf8",
+    );
+    await fs.writeFile(path.join(skillDir, "references", "guide.md"), "# Guide\n", "utf8");
+    await fs.writeFile(path.join(skillDir, "graphify-out", "graph.json"), "{}\n", "utf8");
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    const result = await svc.importFromSource(companyId, packageDir);
+
+    expect(result.imported).toHaveLength(1);
+    expect(result.imported[0]?.fileInventory.map((entry) => entry.path).sort()).toEqual([
+      "SKILL.md",
+      "references/guide.md",
+    ]);
+  });
+
   it("bounds direct root SKILL.md imports to known support directories", async () => {
     const companyId = randomUUID();
     const repoDir = await createManagedSkillDir(companyId, "root-skill-");

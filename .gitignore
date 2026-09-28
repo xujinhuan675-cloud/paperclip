@@ -80,5 +80,8 @@ tests/storybook-visual/playwright-report/
 .env.local
 test-results/
 
+# Generated Graphify indexes are local artifacts, not source inputs.
+graphify-out/
+
 # Retained local lifecycle behavior measurements
 .lifecycle-baseline/

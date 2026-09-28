@@ -1,1 +1,4 @@
 patches/*.patch whitespace=-space-before-tab
+skills-releases/**/*.md text eol=lf
+skills-releases/**/*.json text eol=lf
+skills-releases/**/*.sh text eol=lf
