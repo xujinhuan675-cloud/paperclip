@@ -33,6 +33,7 @@ import {
   resolveNextSessionState,
   resolveTaskSessionConfigFreshness,
   isWorkspaceSyncConflictFailure,
+  isTransientAgentFailure,
   requiresPushCapabilityPreflight,
   resolveWorkspaceAfterLowTrustPreflight,
   resolveRuntimeSessionParamsForWorkspace,
@@ -3170,6 +3171,34 @@ describe("isWorkspaceSyncConflictFailure", () => {
     expect(isWorkspaceSyncConflictFailure("no Codex credentials provisioned for managed home")).toBe(false);
     expect(isWorkspaceSyncConflictFailure(null)).toBe(false);
     expect(isWorkspaceSyncConflictFailure("")).toBe(false);
+  });
+});
+
+describe("isTransientAgentFailure", () => {
+  it("keeps agents routable after provider/controller recovery failures", () => {
+    expect(isTransientAgentFailure({
+      errorCode: "setup_failed",
+      message: "Legacy controller lease lost",
+    })).toBe(true);
+    expect(isTransientAgentFailure({
+      errorCode: "acpx_turn_failed",
+      message: "Persistent ACP session abc could not be resumed: Internal error",
+    })).toBe(true);
+    expect(isTransientAgentFailure({
+      errorCode: "process_lost",
+      message: "Process lost -- server may have restarted",
+    })).toBe(true);
+  });
+
+  it("does not hide configuration failures as transient", () => {
+    expect(isTransientAgentFailure({
+      errorCode: "configuration_incomplete",
+      message: "Configure this agent's AI connection",
+    })).toBe(false);
+    expect(isTransientAgentFailure({
+      errorCode: "setup_failed",
+      message: "Workspace validation failed",
+    })).toBe(false);
   });
 });
 

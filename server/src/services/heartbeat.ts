@@ -5744,12 +5744,42 @@ const WORKSPACE_SYNC_CONFLICT_SIGNATURES = [
   "lacks these prerequisite commits",
 ];
 
+// These failures describe a lost provider/controller/session path rather than
+// a broken agent configuration. Keeping the agent in `error` after one of
+// them removes it from routing even though a fresh run can recover normally.
+const TRANSIENT_AGENT_FAILURE_CODES = new Set([
+  "acpx_turn_failed",
+  "process_lost",
+]);
+const TRANSIENT_AGENT_FAILURE_SIGNATURES = [
+  "Legacy controller lease lost",
+  "Persistent ACP session",
+  "The ACP startup handshake did not finish before the startup deadline.",
+  "Process lost --",
+];
+
 export function isWorkspaceSyncConflictFailure(
   message: string | null | undefined,
 ): boolean {
   if (!message) return false;
   return WORKSPACE_SYNC_CONFLICT_SIGNATURES.some((signature) =>
     message.includes(signature),
+  );
+}
+
+export function isTransientAgentFailure(input: {
+  errorCode?: string | null;
+  message?: string | null;
+}): boolean {
+  if (input.errorCode && TRANSIENT_AGENT_FAILURE_CODES.has(input.errorCode)) {
+    return true;
+  }
+  const message = input.message?.trim();
+  return Boolean(
+    message &&
+      TRANSIENT_AGENT_FAILURE_SIGNATURES.some((signature) =>
+        message.includes(signature),
+      ),
   );
 }
 
@@ -19321,6 +19351,10 @@ export function heartbeatService(
 
       await finalizeAgentStatus(run.agentId, "failed", baseMessage, {
         wasFirstHeartbeat: timerClaimWasFirstHeartbeat(run),
+        keepIdleOnFailure: isTransientAgentFailure({
+          errorCode: finalizedRun.errorCode,
+          message: baseMessage,
+        }),
       });
       await startNextQueuedRunForAgent(run.agentId);
       runningProcesses.delete(run.id);
@@ -25335,7 +25369,11 @@ export function heartbeatService(
             ((finalizedRun
               ? readHeartbeatRunErrorFamily(finalizedRun) === "provider_quota"
               : runErrorCode === "provider_quota") ||
-              isWorkspaceSyncConflictFailure(adapterResult.errorMessage)),
+              isWorkspaceSyncConflictFailure(adapterResult.errorMessage) ||
+              isTransientAgentFailure({
+                errorCode: finalizedRun?.errorCode ?? runErrorCode,
+                message: adapterResult.errorMessage ?? runErrorMessage,
+              })),
           wasFirstHeartbeat: timerClaimWasFirstHeartbeat(run),
         });
       } catch (err) {
@@ -25665,7 +25703,11 @@ export function heartbeatService(
           wasFirstHeartbeat: timerClaimWasFirstHeartbeat(run),
           keepIdleOnFailure:
             Boolean(nonRetryablePreflightFailureCode(err)) ||
-            isWorkspaceSyncConflictFailure(message),
+            isWorkspaceSyncConflictFailure(message) ||
+            isTransientAgentFailure({
+              errorCode: failedRun?.errorCode,
+              message,
+            }),
         });
       }
     } catch (outerErr) {
@@ -25917,7 +25959,12 @@ export function heartbeatService(
             // Keep the failed run and its safe provider refusal authoritative,
             // but return the agent to idle so clients do not also announce a
             // misleading agent-wide error for the same rejected chat turn.
-            keepIdleOnFailure: Boolean(nonRetryablePreflightCode),
+            keepIdleOnFailure:
+              Boolean(nonRetryablePreflightCode) ||
+              isTransientAgentFailure({
+                errorCode: setupFailureErrorCode,
+                message,
+              }),
           }).catch(() => undefined);
         }
       }
