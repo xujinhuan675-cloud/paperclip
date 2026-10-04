@@ -272,6 +272,26 @@ describe("ssh env-lab fixture", () => {
     expect(result.stdout).toBe("hello over ssh stdin\n");
   }, SSH_FIXTURE_TEST_TIMEOUT_MS);
 
+  it("turns an early remote stdin close into a rejected command", async () => {
+    const rootDir = await createFixtureRootDir();
+    const statePath = path.join(rootDir, "state.json");
+
+    const started = await startSshEnvLabFixtureOrSkip(statePath, "SSH stdin close test");
+    if (!started) return;
+    const config = await buildSshEnvLabFixtureConfig(started);
+
+    // The remote shell closes stdin before the large payload is written. The
+    // SSH child may emit EPIPE on its stdin; that must reject this call rather
+    // than surface as an uncaught process-level error.
+    await expect(
+      runSshCommand(config, "exec 0<&-; sleep 1", {
+        stdin: "x".repeat(4 * 1024 * 1024),
+        timeoutMs: 5_000,
+        maxBuffer: 64 * 1024,
+      }),
+    ).rejects.toBeDefined();
+  }, SSH_FIXTURE_TEST_TIMEOUT_MS);
+
   it("does not treat an unrelated reused pid as the running fixture", async () => {
     const rootDir = await createFixtureRootDir();
     const statePath = path.join(rootDir, "state.json");

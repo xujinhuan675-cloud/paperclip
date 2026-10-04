@@ -239,7 +239,7 @@ async function spawnText(
     let settled = false;
     let timedOut = false;
 
-    const finishReject = (error: Error & { stdout?: string; stderr?: string; code?: number | null; killed?: boolean }) => {
+    const finishReject = (error: Error & { stdout?: string; stderr?: string; code?: number | string | null; killed?: boolean }) => {
       if (settled) return;
       settled = true;
       error.stdout = stdout;
@@ -301,6 +301,15 @@ async function spawnText(
     child.on("error", (error) => {
       clearTimers();
       finishReject(Object.assign(error, { code: null }));
+    });
+
+    // SSH can close its input channel before the caller finishes writing a
+    // request (for example when the remote command times out or the session
+    // drops). Node emits that broken pipe on child.stdin; without a listener
+    // it becomes an uncaught `EPIPE` and terminates the Paperclip process.
+    child.stdin?.on("error", (error) => {
+      clearTimers();
+      finishReject(Object.assign(error, { code: (error as NodeJS.ErrnoException).code ?? null }));
     });
 
     child.on("close", (code, signal) => {
