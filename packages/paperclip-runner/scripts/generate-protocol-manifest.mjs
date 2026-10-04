@@ -29,6 +29,10 @@ const expectedRejectedFixtures = new Set([
   "fixtures/replay/semantic-tool-unsupported-required-version.json",
 ]);
 
+export function protocolSourceSha256(source) {
+  return sha256(source.replace(/\r\n?/g, "\n"));
+}
+
 export async function buildProtocolManifest() {
   const schemas = await loadSchemaCatalog(schemaDirectory);
   const validators = compileProtocolValidators(schemas);
@@ -89,7 +93,7 @@ export async function buildProtocolManifest() {
 
     fixtures.push({
       path: relativePath,
-      sha256: sha256(source),
+      sha256: protocolSourceSha256(source),
       expectation,
       compatibilityCase,
     });
@@ -108,7 +112,7 @@ export async function buildProtocolManifest() {
     schemas: schemas.map((record) => ({
       path: portableRelative(protocolRoot, record.path),
       id: record.value.$id,
-      sha256: sha256(record.source),
+      sha256: protocolSourceSha256(record.source),
     })),
     fixtures,
   };

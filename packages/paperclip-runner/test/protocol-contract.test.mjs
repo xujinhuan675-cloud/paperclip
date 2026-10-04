@@ -5,7 +5,10 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { buildProtocolManifest } from "../scripts/generate-protocol-manifest.mjs";
+import {
+  buildProtocolManifest,
+  protocolSourceSha256,
+} from "../scripts/generate-protocol-manifest.mjs";
 import {
   assertAcpxQuestionFixture,
   assertCodexQuestionFixture,
@@ -35,6 +38,12 @@ test("the generated manifest matches all checked-in schemas and fixtures", async
   const expected = `${JSON.stringify(await buildProtocolManifest(), null, 2)}\n`;
   const actual = await readFile(resolve(protocolRoot, "manifest.json"), "utf8");
   assert.equal(actual, expected);
+});
+
+test("protocol source hashes are stable across checkout line endings", () => {
+  const lf = "first line\nsecond line\n";
+  const crlf = lf.replace(/\n/g, "\r\n");
+  assert.equal(protocolSourceSha256(lf), protocolSourceSha256(crlf));
 });
 
 test("canonical replay fixtures use supported required versions", async () => {
