@@ -10791,9 +10791,11 @@ export function issueService(db: Db) {
         issueData.executionWorkspaceSettings !== undefined
           ? parseIssueExecutionWorkspaceSettings(
               issueData.executionWorkspaceSettings,
+              { includeEnvironmentId: true },
             )
           : parseIssueExecutionWorkspaceSettings(
               existing.executionWorkspaceSettings,
+              { includeEnvironmentId: true },
             );
       if (issueData.executionWorkspaceSettings !== undefined) {
         patch.executionWorkspaceSettings = nextExecutionWorkspaceSettings

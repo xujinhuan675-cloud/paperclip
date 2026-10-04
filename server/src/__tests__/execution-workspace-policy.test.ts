@@ -27,8 +27,9 @@ describe("execution workspace policy helpers", () => {
       defaultIssueExecutionWorkspaceSettingsForProject({
         enabled: true,
         defaultMode: "isolated_workspace",
+        environmentId: "project-env",
       }),
-    ).toEqual({ mode: "isolated_workspace" });
+    ).toEqual({ mode: "isolated_workspace", environmentId: "project-env" });
     expect(
       defaultIssueExecutionWorkspaceSettingsForProject({
         enabled: true,
@@ -350,6 +351,7 @@ describe("execution workspace policy helpers", () => {
         enabled: true,
         sharedWorkspaceConcurrency: "serialize",
         defaultMode: "isolated",
+        environmentId: "11111111-1111-4111-8111-111111111111",
         workspaceStrategy: {
           type: "git_worktree",
           worktreeParentDir: ".paperclip/worktrees",
@@ -362,6 +364,7 @@ describe("execution workspace policy helpers", () => {
       enabled: true,
       sharedWorkspaceConcurrency: "serialize",
       defaultMode: "isolated_workspace",
+      environmentId: "11111111-1111-4111-8111-111111111111",
       workspaceStrategy: {
         type: "git_worktree",
         worktreeParentDir: ".paperclip/worktrees",
@@ -437,6 +440,26 @@ describe("execution workspace policy helpers", () => {
       environmentId: "agent-env",
       source: "agent",
     });
+  });
+
+  it("prefers explicit issue and project environments before agent defaults", () => {
+    expect(
+      resolveExecutionWorkspaceEnvironmentId({
+        issueEnvironmentId: "issue-env",
+        projectEnvironmentId: "project-env",
+        agentDefaultEnvironmentId: "agent-env",
+        instanceDefaultEnvironmentId: "instance-env",
+        localDefaultEnvironmentId: "local-env",
+      }),
+    ).toEqual({ environmentId: "issue-env", source: "issue" });
+    expect(
+      resolveExecutionWorkspaceEnvironmentId({
+        projectEnvironmentId: "project-env",
+        agentDefaultEnvironmentId: "agent-env",
+        instanceDefaultEnvironmentId: "instance-env",
+        localDefaultEnvironmentId: "local-env",
+      }),
+    ).toEqual({ environmentId: "project-env", source: "project" });
   });
 
   it("falls back to the instance default environment when the agent has none", () => {

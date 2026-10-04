@@ -20480,6 +20480,7 @@ export function heartbeatService(
       const parsedIssueExecutionWorkspaceSettings =
         parseIssueExecutionWorkspaceSettings(
           issueContext?.executionWorkspaceSettings,
+          { includeEnvironmentId: true },
         );
       const issueExecutionWorkspaceSettings = isolatedWorkspacesEnabled
         ? parsedIssueExecutionWorkspaceSettings
@@ -21034,6 +21035,9 @@ export function heartbeatService(
         ? await environmentsSvc.findManagedSandboxEnvironment(agent.companyId)
         : null;
       const environmentResolution = resolveExecutionWorkspaceEnvironmentId({
+        issueEnvironmentId:
+          parsedIssueExecutionWorkspaceSettings?.environmentId ?? null,
+        projectEnvironmentId: projectExecutionWorkspacePolicy?.environmentId ?? null,
         agentDefaultEnvironmentId: agent.defaultEnvironmentId,
         instanceDefaultEnvironmentId:
           resolvedInstanceSettings.defaultEnvironmentId ?? null,
@@ -27603,6 +27607,7 @@ export function heartbeatService(
           ) {
             const issueSettings = parseIssueExecutionWorkspaceSettings(
               issue.executionWorkspaceSettings,
+              { includeEnvironmentId: true },
             );
             const resolvedMode = resolveExecutionWorkspaceMode({
               projectPolicy: null,

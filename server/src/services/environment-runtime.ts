@@ -1216,6 +1216,16 @@ function createSshEnvironmentDriver(db: Db): EnvironmentRuntimeDriver {
       return await environmentsSvc.releaseLease(input.lease.id, input.status);
     },
 
+    async retryPendingSandboxTeardown({ lease }) {
+      // SSH environments do not allocate a provider-owned sandbox. The lease
+      // points at the operator-managed remote workspace, so cleanup only needs
+      // to validate that this is the recorded SSH lease before releasing the
+      // bookkeeping row. Never run a destructive remote command here.
+      if (lease.provider !== "ssh" || typeof lease.providerLeaseId !== "string" || !lease.providerLeaseId.startsWith("ssh://")) {
+        throw new Error("SSH lease cleanup cannot release an unexpected provider resource.");
+      }
+    },
+
     async realizeWorkspace(input) {
       const record = buildWorkspaceRealizationRecordFromDriverInput({
         environment: input.environment,

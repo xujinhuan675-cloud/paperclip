@@ -9489,6 +9489,66 @@ describe("workspace realization request additionalSources", () => {
     expect(record.mode).toBe("in_place");
   });
 
+  it("defaults an SSH Environment to the configured remote workspace", () => {
+    const now = new Date(0);
+    const workspace = buildRealizedWorkspace();
+    const request = buildWorkspaceRealizationRequest({
+      adapterType: "codex",
+      companyId: "company-1",
+      environmentId: "environment-1",
+      executionWorkspaceId: "execution-workspace-1",
+      issueId: "issue-1",
+      heartbeatRunId: "run-1",
+      requestedMode: "shared_workspace",
+      workspace,
+      workspaceConfig: null,
+    });
+    const lease: EnvironmentLease = {
+      id: "lease-ssh-1",
+      companyId: "company-1",
+      environmentId: "environment-1",
+      executionWorkspaceId: "execution-workspace-1",
+      issueId: "issue-1",
+      heartbeatRunId: "run-1",
+      status: "active",
+      leasePolicy: "ephemeral",
+      provider: "ssh",
+      providerLeaseId: "ssh://user@host:22333/mnt/talkwise",
+      acquiredAt: now,
+      lastUsedAt: now,
+      expiresAt: null,
+      releasedAt: null,
+      failureReason: null,
+      cleanupStatus: null,
+      metadata: {
+        host: "host",
+        port: 22333,
+        username: "user",
+        remoteCwd: "/mnt/talkwise",
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+    const environment: Environment = {
+      id: "environment-1",
+      name: "Windows TalkWise",
+      description: null,
+      driver: "ssh",
+      status: "active",
+      config: {},
+      envVars: {},
+      metadata: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const record = buildWorkspaceRealizationRecord({ environment, lease, request });
+
+    expect(record.mode).toBe("in_place");
+    expect(record.authoritativeRoot).toBe("/mnt/talkwise");
+    expect(record.remote.path).toBe("/mnt/talkwise");
+  });
+
   it("reads a legacy request without additionalSources as an empty array", () => {
     const legacyRequest = {
       version: 1,

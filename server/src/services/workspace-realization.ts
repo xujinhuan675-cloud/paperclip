@@ -188,7 +188,13 @@ export function buildWorkspaceRealizationRecord(input: {
     ...parseObject(providerMetadata.workspaceRealization),
     ...providerMetadata,
   };
-  const mode = realizationMetadata.mode === "in_place" || realizationMetadata.realizationMode === "in_place"
+  const requestedMode = readString(realizationMetadata.mode) ?? readString(realizationMetadata.realizationMode);
+  // The built-in SSH Environment already owns the configured remote workspace.
+  // Keep that path authoritative unless a provider explicitly asks for a copy;
+  // otherwise the adapter would create a per-run nested workspace and the agent
+  // would no longer execute in the operator-configured remote checkout.
+  const mode = requestedMode === "in_place" ||
+    (requestedMode === null && transport === "ssh" && remotePath !== null)
     ? "in_place" as const
     : "copy" as const;
   const authoritativeRoot =
