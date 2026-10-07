@@ -30,6 +30,16 @@ updates:
         update-types:
           - "version-update:semver-major"
 
+  - package-ecosystem: npm
+    directory: "/docker/cli-tools"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

@@ -40,7 +40,10 @@ echo "==> Verifying key binaries in image"
   rg --version
   python3 --version
   curl --version | head -1
-  claude --version 2>/dev/null || echo "claude CLI not found (OK in minimal builds)"
+  for cli in claude codex opencode gemini kimi; do
+    command -v "$cli"
+    "$cli" --version
+  done
 '
 
 echo "==> Verifying PID 1 is an init that reaps adopted orphans"

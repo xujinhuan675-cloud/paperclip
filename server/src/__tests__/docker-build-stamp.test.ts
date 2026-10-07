@@ -22,6 +22,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
 const workflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker.yml"), "utf8");
 const previewWorkflow = readFileSync(path.join(repoRoot, ".github", "workflows", "release.yml"), "utf8");
+const dockerBuildTest = readFileSync(path.join(repoRoot, "scripts", "docker-build-test.sh"), "utf8");
+const cliToolsPackage = JSON.parse(readFileSync(path.join(repoRoot, "docker", "cli-tools", "package.json"), "utf8")) as {
+  dependencies: Record<string, string>;
+};
+const cliToolsLock = JSON.parse(readFileSync(path.join(repoRoot, "docker", "cli-tools", "package-lock.json"), "utf8")) as {
+  packages: Record<string, { version?: string }>;
+};
+const dependabot = readFileSync(path.join(repoRoot, ".github", "dependabot.yml"), "utf8");
 
 /**
  * Return the text of the Dockerfile stage that starts at the named target.
@@ -36,16 +44,28 @@ function stageBody(source: string, stageName: string): string {
   return source.slice(start, end);
 }
 
-it("keeps per-build runtime metadata out of the weekly CLI-install cache", () => {
+it("keeps CLI versions and application dependencies in reusable production layers", () => {
   const production = stageBody(dockerfile, "production");
-  const tools = production.search(/^RUN echo "cli-tools-epoch:/m);
   const entrypoint = production.search(/^RUN chmod \+x \/usr\/local\/bin\/docker-entrypoint\.sh/m);
   const runtime = production.search(/^ENV NODE_ENV=production/m);
-  const epoch = production.search(/^ARG CLI_TOOLS_CACHE_EPOCH\b/m);
-  expect(tools).toBeGreaterThanOrEqual(0);
-  expect(entrypoint).toBeGreaterThan(tools);
-  expect(epoch).toBeGreaterThanOrEqual(0);
-  expect(epoch).toBeLessThan(tools);
+  expect(production).not.toContain("CLI_TOOLS_CACHE_EPOCH");
+  expect(production).toContain("COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/");
+  expect(production).toContain("RUN npm ci --prefix /opt/paperclip-cli-tools --omit=dev");
+  expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
+  expect(production).toContain("COPY --link --chown=node:node --from=build /app/node_modules /app/node_modules");
+  expect(production).toContain("COPY --link --exclude=node_modules/** --chown=node:node --from=build /app /app");
+  for (const name of [
+    "@anthropic-ai/claude-code",
+    "@openai/codex",
+    "opencode-ai",
+    "@google/gemini-cli",
+    "@moonshot-ai/kimi-code",
+  ]) {
+    const version = cliToolsPackage.dependencies[name];
+    expect(version, `${name} must be pinned to an exact version`).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+    expect(cliToolsLock.packages[`node_modules/${name}`]?.version).toBe(version);
+  }
+  expect(dependabot).toContain('directory: "/docker/cli-tools"');
   for (const name of ["PAPERCLIP_BUILD_VERSION", "PAPERCLIP_BUILD_COMMIT"]) {
     const declarations = [...production.matchAll(new RegExp(`^ARG ${name}\\b`, "gm"))];
     expect(declarations).toHaveLength(1);
@@ -74,6 +94,17 @@ describe("docker build-stamp wiring", () => {
         .toMatch(/^\s*PAPERCLIP_BUILD_COMMIT=\$\{\{ (?:github.sha|inputs.source_ref) \}\}$/m);
     }
   });
+});
+
+it("does not let calendar changes invalidate pinned CLI runtime tools", () => {
+  expect(workflow).not.toContain("CLI_TOOLS_CACHE_EPOCH");
+  expect(workflow).not.toContain("Compute tool cache epoch");
+  expect(previewWorkflow).not.toContain("CLI_TOOLS_CACHE_EPOCH");
+  expect(previewWorkflow).not.toContain("TOOLS_EPOCH");
+  expect(dockerBuildTest).toMatch(/for cli in claude codex opencode gemini kimi/);
+  expect(workflow).toContain("Verify bundled local-agent CLIs");
+  expect(workflow).toMatch(/IMAGE_DIGEST: \$\{\{ steps\.build\.outputs\.digest \}\}/);
+  expect(workflow).toMatch(/for cli in claude codex opencode gemini kimi/);
 });
 
 
