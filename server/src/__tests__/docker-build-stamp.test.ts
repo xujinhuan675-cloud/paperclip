@@ -54,7 +54,7 @@ it("keeps CLI versions and application dependencies in reusable production layer
   expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
   expect(production).toContain("COPY --chown=node:node --from=build /app/node_modules /app/node_modules");
   expect(dockerfile).toContain("FROM build AS production-files\nRUN rm -rf /app/node_modules");
-  expect(production).toContain("COPY --link --chown=node:node --from=production-files /app /app");
+  expect(production).toContain("COPY --chown=node:node --from=production-files /app /app");
   for (const name of [
     "@anthropic-ai/claude-code",
     "@openai/codex",
