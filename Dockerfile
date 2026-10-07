@@ -166,7 +166,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # The workspace store is stable across source-only changes. Keep it separate
 # so deploying application code does not republish the dependency payload.
-COPY --link --chown=node:node --from=build /app/node_modules /app/node_modules
+COPY --chown=node:node --from=build /app/node_modules /app/node_modules
 # Exclude only the root store; package-level node_modules links are required
 # for workspace resolution at runtime.
 COPY --link --exclude=node_modules/** --chown=node:node --from=build /app /app

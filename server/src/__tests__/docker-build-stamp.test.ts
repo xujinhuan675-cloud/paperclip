@@ -52,7 +52,7 @@ it("keeps CLI versions and application dependencies in reusable production layer
   expect(production).toContain("COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/");
   expect(production).toContain("RUN npm ci --prefix /opt/paperclip-cli-tools --omit=dev");
   expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
-  expect(production).toContain("COPY --link --chown=node:node --from=build /app/node_modules /app/node_modules");
+  expect(production).toContain("COPY --chown=node:node --from=build /app/node_modules /app/node_modules");
   expect(production).toContain("COPY --link --exclude=node_modules/** --chown=node:node --from=build /app /app");
   for (const name of [
     "@anthropic-ai/claude-code",
