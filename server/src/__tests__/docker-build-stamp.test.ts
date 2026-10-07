@@ -117,6 +117,8 @@ it("does not let calendar changes invalidate pinned CLI runtime tools", () => {
   expect(previewWorkflow).not.toContain("TOOLS_EPOCH");
   expect(dockerBuildTest).toMatch(/for cli in claude codex opencode gemini kimi/);
   expect(workflow).toContain("Verify bundled local-agent CLIs");
+  expect(workflow).toContain("Check compressed runtime image budget");
+  expect(workflow).toContain('node scripts/check-docker-layer-budget.mjs "ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST}" "${{ matrix.arch }}"');
   expect(workflow).toMatch(/IMAGE_DIGEST: \$\{\{ steps\.build\.outputs\.digest \}\}/);
   expect(workflow).toMatch(/for cli in claude codex opencode gemini kimi/);
   for (const source of [workflow, dockerBuildTest]) {

@@ -144,11 +144,19 @@ jobs:
 
           echo "Using refreshed pnpm-lock.yaml in the Docker build context."
 
-      - name: Free runner disk
+      - name: Check runner disk headroom
         run: |
           set -euo pipefail
           echo "Disk before cleanup:"
           df -h
+
+          # Native runners already have ample space on many runs. Preserve a
+          # conservative 80 GiB headroom before skipping destructive cleanup.
+          available_kib="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')"
+          if [[ "$available_kib" =~ ^[0-9]+$ ]] && [ "$available_kib" -ge $((80 * 1024 * 1024)) ]; then
+            echo "At least 80 GiB available; no disk cleanup needed."
+            exit 0
+          fi
 
           pnpm store prune || true
           sudo apt-get clean || true
@@ -241,6 +249,15 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-${{ matrix.arch }}
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-${{ matrix.arch }},mode=max
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Record disk after image build
+        if: always()
+        run: df -h
+
+      - name: Check compressed runtime image budget
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: node scripts/check-docker-layer-budget.mjs "ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST}" "${{ matrix.arch }}"
 
       - name: Verify bundled local-agent CLIs
         env:
