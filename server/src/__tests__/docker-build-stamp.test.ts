@@ -27,7 +27,7 @@ const cliToolsPackage = JSON.parse(readFileSync(path.join(repoRoot, "docker", "c
   dependencies: Record<string, string>;
 };
 const cliToolsLock = JSON.parse(readFileSync(path.join(repoRoot, "docker", "cli-tools", "package-lock.json"), "utf8")) as {
-  packages: Record<string, { version?: string }>;
+  packages: Record<string, { version?: string; libc?: string[] }>;
 };
 const dependabot = readFileSync(path.join(repoRoot, ".github", "dependabot.yml"), "utf8");
 
@@ -50,7 +50,8 @@ it("keeps CLI versions and application dependencies in reusable production layer
   const runtime = production.search(/^ENV NODE_ENV=production/m);
   expect(production).not.toContain("CLI_TOOLS_CACHE_EPOCH");
   expect(production).toContain("COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/");
-  expect(production).toContain("RUN npm ci --prefix /opt/paperclip-cli-tools --omit=dev");
+  expect(production).toContain("RUN --mount=type=cache,target=/root/.npm,sharing=locked");
+  expect(production).toContain("npm ci --prefix /opt/paperclip-cli-tools --omit=dev --no-audit --no-fund");
   expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
   expect(production).toContain("COPY --chown=node:node --from=build /app/node_modules /app/node_modules");
   expect(dockerfile).toContain("FROM build AS production-files\nRUN rm -rf /app/node_modules");
@@ -73,6 +74,18 @@ it("keeps CLI versions and application dependencies in reusable production layer
     expect(declarations[0].index).toBeGreaterThan(entrypoint);
     expect(declarations[0].index).toBeLessThan(runtime);
     expect(production.slice(runtime)).toContain(`${name}=\${${name}}`);
+  }
+});
+
+it("preserves libc constraints so Debian does not install incompatible native CLI binaries", () => {
+  const linuxPackages = Object.entries(cliToolsLock.packages).filter(([name]) => name.includes("-linux-"));
+  expect(linuxPackages.length).toBeGreaterThan(0);
+  for (const [name, metadata] of linuxPackages) {
+    if (name.endsWith("-musl")) {
+      expect(metadata.libc, `${name} must be excluded on glibc`).toEqual(["musl"]);
+    } else if (name.endsWith("-gnu") || /@anthropic-ai\/claude-code-linux-(arm64|x64)$/.test(name)) {
+      expect(metadata.libc, `${name} must retain its glibc platform constraint`).toEqual(["glibc"]);
+    }
   }
 });
 
@@ -106,6 +119,10 @@ it("does not let calendar changes invalidate pinned CLI runtime tools", () => {
   expect(workflow).toContain("Verify bundled local-agent CLIs");
   expect(workflow).toMatch(/IMAGE_DIGEST: \$\{\{ steps\.build\.outputs\.digest \}\}/);
   expect(workflow).toMatch(/for cli in claude codex opencode gemini kimi/);
+  for (const source of [workflow, dockerBuildTest]) {
+    expect(source).toContain("test ! -d /root/.npm/_cacache");
+    expect(source).toContain('find /opt/paperclip-cli-tools/node_modules -maxdepth 2 -type d -name "*-musl"');
+  }
 });
 
 

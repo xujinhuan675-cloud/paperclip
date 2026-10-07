@@ -161,7 +161,9 @@ RUN apt-get update \
 # Dependabot updates this standalone lock independently from application source,
 # so ordinary commits reuse the complete local-adapter CLI runtime layer.
 COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/
-RUN npm ci --prefix /opt/paperclip-cli-tools --omit=dev
+# Keep downloaded tarballs outside the runtime filesystem and image layers.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --prefix /opt/paperclip-cli-tools --omit=dev --no-audit --no-fund
 ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/

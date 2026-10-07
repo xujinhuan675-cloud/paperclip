@@ -248,6 +248,11 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --pull always "ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST}" sh -ec '
+            test ! -d /root/.npm/_cacache
+            if find /opt/paperclip-cli-tools/node_modules -maxdepth 2 -type d -name "*-musl" | grep -q .; then
+              echo "ERROR: incompatible musl CLI binaries installed in the glibc image" >&2
+              exit 1
+            fi
             for cli in claude codex opencode gemini kimi; do
               command -v "$cli"
               "$cli" --version
