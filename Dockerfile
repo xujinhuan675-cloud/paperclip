@@ -144,6 +144,9 @@ RUN pnpm --filter @paperclipai/server build
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
 RUN rm -rf packages/paperclip-runner/runner/target
 
+FROM build AS production-files
+RUN rm -rf /app/node_modules
+
 FROM base AS production
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -167,9 +170,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # The workspace store is stable across source-only changes. Keep it separate
 # so deploying application code does not republish the dependency payload.
 COPY --chown=node:node --from=build /app/node_modules /app/node_modules
-# Exclude only the root store; package-level node_modules links are required
-# for workspace resolution at runtime.
-COPY --link --exclude=node_modules/** --chown=node:node --from=build /app /app
+# The intermediate stage removes only the root store; package-level
+# node_modules links remain and resolve through the separately copied store.
+COPY --link --chown=node:node --from=production-files /app /app
 
 # Declare per-build metadata after the stable RUN layers. Docker includes
 # in-scope ARG values in a RUN's environment even when its command does not

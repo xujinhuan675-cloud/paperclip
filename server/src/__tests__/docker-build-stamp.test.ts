@@ -37,7 +37,7 @@ const dependabot = readFileSync(path.join(repoRoot, ".github", "dependabot.yml")
  */
 function stageBody(source: string, stageName: string): string {
   const froms = [...source.matchAll(/^FROM .*$/gm)];
-  const startIdx = froms.findIndex((m) => new RegExp(`\\bAS ${stageName}\\b`).test(m[0]));
+  const startIdx = froms.findIndex((m) => new RegExp(`\\bAS ${stageName}(?:\\s|$)`).test(m[0]));
   expect(startIdx, `Dockerfile must declare a '${stageName}' stage`).toBeGreaterThanOrEqual(0);
   const start = froms[startIdx].index ?? 0;
   const end = froms[startIdx + 1]?.index ?? source.length;
@@ -53,7 +53,8 @@ it("keeps CLI versions and application dependencies in reusable production layer
   expect(production).toContain("RUN npm ci --prefix /opt/paperclip-cli-tools --omit=dev");
   expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
   expect(production).toContain("COPY --chown=node:node --from=build /app/node_modules /app/node_modules");
-  expect(production).toContain("COPY --link --exclude=node_modules/** --chown=node:node --from=build /app /app");
+  expect(dockerfile).toContain("FROM build AS production-files\nRUN rm -rf /app/node_modules");
+  expect(production).toContain("COPY --link --chown=node:node --from=production-files /app /app");
   for (const name of [
     "@anthropic-ai/claude-code",
     "@openai/codex",
