@@ -53,7 +53,8 @@ it("keeps CLI versions and application dependencies in reusable production layer
   expect(production).toContain("RUN --mount=type=cache,target=/root/.npm,sharing=locked");
   expect(production).toContain("npm ci --prefix /opt/paperclip-cli-tools --omit=dev --no-audit --no-fund");
   expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
-  expect(production).toContain("COPY --chown=node:node --from=build /app/node_modules /app/node_modules");
+  expect(production).toContain("COPY --chown=node:node --from=deps /app/node_modules /app/node_modules");
+  expect(production).not.toContain("COPY --chown=node:node --from=build /app/node_modules");
   expect(dockerfile).toContain("FROM build AS production-files\nRUN rm -rf /app/node_modules");
   expect(production).toContain("COPY --chown=node:node --from=production-files /app /app");
   for (const name of [
