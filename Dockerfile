@@ -49,7 +49,9 @@ COPY packages/plugins/plugin-workspace-diff/package.json packages/plugins/plugin
 COPY patches/ patches/
 COPY scripts/link-plugin-dev-sdk.mjs scripts/
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm/store,sharing=locked \
+  pnpm config set store-dir /pnpm/store \
+  && pnpm install --frozen-lockfile
 
 FROM base AS rust-toolchain
 WORKDIR /app

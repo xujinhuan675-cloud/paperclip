@@ -5,6 +5,11 @@
 node_modules
 **/node_modules
 **/graphify-out
+.code-review-graph
+**/.code-review-graph
+*.sqlite
+*.sqlite-*
+*.tsbuildinfo
 coverage
 data
 tmp
