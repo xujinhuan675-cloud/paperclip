@@ -1,0 +1,12 @@
+{
+  "name": "paperclip-cli-tools",
+  "private": true,
+  "description": "Pinned CLI tools included in the Paperclip production image",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.292",
+    "@google/gemini-cli": "0.63.0",
+    "@moonshot-ai/kimi-code": "2.1.1",
+    "@openai/codex": "0.161.0",
+    "opencode-ai": "1.18.35"
+  }
+}
