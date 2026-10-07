@@ -172,7 +172,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY --chown=node:node --from=build /app/node_modules /app/node_modules
 # The intermediate stage removes only the root store; package-level
 # node_modules links remain and resolve through the separately copied store.
-COPY --link --chown=node:node --from=production-files /app /app
+COPY --chown=node:node --from=production-files /app /app
 
 # Declare per-build metadata after the stable RUN layers. Docker includes
 # in-scope ARG values in a RUN's environment even when its command does not
