@@ -551,6 +551,8 @@ export interface PluginLauncherDeclaration {
   id: string;
   /** Human-readable label shown for the launcher. */
   displayName: string;
+  /** Optional Lucide icon name rendered before the launcher label. */
+  icon?: string;
   /** Optional description for operator-facing docs or future UI affordances. */
   description?: string;
   /** Where in the host UI this launcher should be placed. */

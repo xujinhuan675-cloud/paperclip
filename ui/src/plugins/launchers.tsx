@@ -17,6 +17,7 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PLUGIN_LAUNCHER_BOUNDS } from "@paperclipai/shared";
+import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic.js";
 import type {
   PluginLauncherBounds,
   PluginLauncherDeclaration,
@@ -228,6 +229,16 @@ function launcherTriggerClassName(placementZone: PluginLauncherPlacementZone): s
     default:
       return "h-8";
   }
+}
+
+function launcherIconName(value: string | null | undefined): IconName | null {
+  const normalized = value?.trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[\s_]+/g, "-")
+    .toLowerCase();
+  return normalized && iconNames.includes(normalized as IconName)
+    ? normalized as IconName
+    : null;
 }
 
 function launcherShellBoundsStyle(bounds: PluginLauncherBounds | null): CSSProperties {
@@ -761,6 +772,7 @@ function DefaultLauncherTrigger({
   placementZone: PluginLauncherPlacementZone;
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
+  const iconName = launcherIconName(launcher.icon);
   return (
     <Button
       type="button"
@@ -769,6 +781,14 @@ function DefaultLauncherTrigger({
       className={launcherTriggerClassName(placementZone)}
       onClick={onClick}
     >
+      {iconName ? (
+        <DynamicIcon
+          name={iconName}
+          className="h-4 w-4 shrink-0"
+          aria-hidden="true"
+          fallback={() => null}
+        />
+      ) : null}
       {displayName ?? launcher.displayName}
     </Button>
   );

@@ -547,6 +547,7 @@ export type PluginLauncherRenderDeclarationInput =
 export const pluginLauncherDeclarationSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
+  icon: z.string().min(1).optional(),
   description: z.string().optional(),
   placementZone: z.enum(PLUGIN_LAUNCHER_PLACEMENT_ZONES),
   exportName: z.string().min(1).optional(),
