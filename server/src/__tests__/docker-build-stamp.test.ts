@@ -90,6 +90,21 @@ it("preserves libc constraints so Debian does not install incompatible native CL
   }
 });
 
+it("isolates dependency inputs and copies their layer before application files and build metadata", () => {
+  const dependencies = stageBody(dockerfile, "deps");
+  const production = stageBody(dockerfile, "production");
+  expect(dependencies).toContain("RUN pnpm install --frozen-lockfile");
+  expect(dependencies).not.toMatch(/^COPY \. \.|^COPY --from=|PAPERCLIP_BUILD_(?:VERSION|COMMIT)/m);
+
+  const dependencyCopy = production.indexOf("COPY --chown=node:node --from=deps /app/node_modules /app/node_modules");
+  const applicationCopy = production.indexOf("COPY --chown=node:node --from=production-files /app /app");
+  expect(dependencyCopy).toBeGreaterThanOrEqual(0);
+  expect(applicationCopy).toBeGreaterThan(dependencyCopy);
+  for (const name of ["PAPERCLIP_BUILD_VERSION", "PAPERCLIP_BUILD_COMMIT"]) {
+    expect(production.indexOf(`ARG ${name}`)).toBeGreaterThan(applicationCopy);
+  }
+});
+
 describe("docker build-stamp wiring", () => {
   it("declares PAPERCLIP_BUILD_COMMIT in the build stage before the server build", () => {
     const build = stageBody(dockerfile, "build");
