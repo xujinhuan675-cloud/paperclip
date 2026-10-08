@@ -22,6 +22,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
 const workflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker.yml"), "utf8");
 const previewWorkflow = readFileSync(path.join(repoRoot, ".github", "workflows", "release.yml"), "utf8");
+const dockerBuildTest = readFileSync(path.join(repoRoot, "scripts", "docker-build-test.sh"), "utf8");
+const cliToolsPackage = JSON.parse(readFileSync(path.join(repoRoot, "docker", "cli-tools", "package.json"), "utf8")) as {
+  dependencies: Record<string, string>;
+};
+const cliToolsLock = JSON.parse(readFileSync(path.join(repoRoot, "docker", "cli-tools", "package-lock.json"), "utf8")) as {
+  packages: Record<string, { version?: string; libc?: string[] }>;
+};
+const dependabot = readFileSync(path.join(repoRoot, ".github", "dependabot.yml"), "utf8");
 
 /**
  * Return the text of the Dockerfile stage that starts at the named target.
@@ -29,29 +37,71 @@ const previewWorkflow = readFileSync(path.join(repoRoot, ".github", "workflows",
  */
 function stageBody(source: string, stageName: string): string {
   const froms = [...source.matchAll(/^FROM .*$/gm)];
-  const startIdx = froms.findIndex((m) => new RegExp(`\\bAS ${stageName}\\b`).test(m[0]));
+  const startIdx = froms.findIndex((m) => new RegExp(`\\bAS ${stageName}(?:\\s|$)`).test(m[0]));
   expect(startIdx, `Dockerfile must declare a '${stageName}' stage`).toBeGreaterThanOrEqual(0);
   const start = froms[startIdx].index ?? 0;
   const end = froms[startIdx + 1]?.index ?? source.length;
   return source.slice(start, end);
 }
 
-it("keeps per-build runtime metadata out of the weekly CLI-install cache", () => {
+it("keeps CLI versions and application dependencies in reusable production layers", () => {
   const production = stageBody(dockerfile, "production");
-  const tools = production.search(/^RUN echo "cli-tools-epoch:/m);
   const entrypoint = production.search(/^RUN chmod \+x \/usr\/local\/bin\/docker-entrypoint\.sh/m);
   const runtime = production.search(/^ENV NODE_ENV=production/m);
-  const epoch = production.search(/^ARG CLI_TOOLS_CACHE_EPOCH\b/m);
-  expect(tools).toBeGreaterThanOrEqual(0);
-  expect(entrypoint).toBeGreaterThan(tools);
-  expect(epoch).toBeGreaterThanOrEqual(0);
-  expect(epoch).toBeLessThan(tools);
+  expect(production).not.toContain("CLI_TOOLS_CACHE_EPOCH");
+  expect(production).toContain("COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/");
+  expect(production).toContain("RUN --mount=type=cache,target=/root/.npm,sharing=locked");
+  expect(production).toContain("npm ci --prefix /opt/paperclip-cli-tools --omit=dev --no-audit --no-fund");
+  expect(production).toContain("ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH");
+  expect(production).toContain("COPY --chown=node:node --from=deps /app/node_modules /app/node_modules");
+  expect(production).not.toContain("COPY --chown=node:node --from=build /app/node_modules");
+  expect(dockerfile).toContain("FROM build AS production-files\nRUN rm -rf /app/node_modules");
+  expect(production).toContain("COPY --chown=node:node --from=production-files /app /app");
+  for (const name of [
+    "@anthropic-ai/claude-code",
+    "@openai/codex",
+    "opencode-ai",
+    "@google/gemini-cli",
+    "@moonshot-ai/kimi-code",
+  ]) {
+    const version = cliToolsPackage.dependencies[name];
+    expect(version, `${name} must be pinned to an exact version`).toMatch(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
+    expect(cliToolsLock.packages[`node_modules/${name}`]?.version).toBe(version);
+  }
+  expect(dependabot).toContain('directory: "/docker/cli-tools"');
   for (const name of ["PAPERCLIP_BUILD_VERSION", "PAPERCLIP_BUILD_COMMIT"]) {
     const declarations = [...production.matchAll(new RegExp(`^ARG ${name}\\b`, "gm"))];
     expect(declarations).toHaveLength(1);
     expect(declarations[0].index).toBeGreaterThan(entrypoint);
     expect(declarations[0].index).toBeLessThan(runtime);
     expect(production.slice(runtime)).toContain(`${name}=\${${name}}`);
+  }
+});
+
+it("preserves libc constraints so Debian does not install incompatible native CLI binaries", () => {
+  const linuxPackages = Object.entries(cliToolsLock.packages).filter(([name]) => name.includes("-linux-"));
+  expect(linuxPackages.length).toBeGreaterThan(0);
+  for (const [name, metadata] of linuxPackages) {
+    if (name.endsWith("-musl")) {
+      expect(metadata.libc, `${name} must be excluded on glibc`).toEqual(["musl"]);
+    } else if (name.endsWith("-gnu") || /@anthropic-ai\/claude-code-linux-(arm64|x64)$/.test(name)) {
+      expect(metadata.libc, `${name} must retain its glibc platform constraint`).toEqual(["glibc"]);
+    }
+  }
+});
+
+it("isolates dependency inputs and copies their layer before application files and build metadata", () => {
+  const dependencies = stageBody(dockerfile, "deps");
+  const production = stageBody(dockerfile, "production");
+  expect(dependencies).toContain("RUN pnpm install --frozen-lockfile");
+  expect(dependencies).not.toMatch(/^COPY \. \.|^COPY --from=|PAPERCLIP_BUILD_(?:VERSION|COMMIT)/m);
+
+  const dependencyCopy = production.indexOf("COPY --chown=node:node --from=deps /app/node_modules /app/node_modules");
+  const applicationCopy = production.indexOf("COPY --chown=node:node --from=production-files /app /app");
+  expect(dependencyCopy).toBeGreaterThanOrEqual(0);
+  expect(applicationCopy).toBeGreaterThan(dependencyCopy);
+  for (const name of ["PAPERCLIP_BUILD_VERSION", "PAPERCLIP_BUILD_COMMIT"]) {
+    expect(production.indexOf(`ARG ${name}`)).toBeGreaterThan(applicationCopy);
   }
 });
 
@@ -74,6 +124,23 @@ describe("docker build-stamp wiring", () => {
         .toMatch(/^\s*PAPERCLIP_BUILD_COMMIT=\$\{\{ (?:github.sha|inputs.source_ref) \}\}$/m);
     }
   });
+});
+
+it("does not let calendar changes invalidate pinned CLI runtime tools", () => {
+  expect(workflow).not.toContain("CLI_TOOLS_CACHE_EPOCH");
+  expect(workflow).not.toContain("Compute tool cache epoch");
+  expect(previewWorkflow).not.toContain("CLI_TOOLS_CACHE_EPOCH");
+  expect(previewWorkflow).not.toContain("TOOLS_EPOCH");
+  expect(dockerBuildTest).toMatch(/for cli in claude codex opencode gemini kimi/);
+  expect(workflow).toContain("Verify bundled local-agent CLIs");
+  expect(workflow).toContain("Check compressed runtime image budget");
+  expect(workflow).toContain('node scripts/check-docker-layer-budget.mjs "ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST}" "${{ matrix.arch }}"');
+  expect(workflow).toMatch(/IMAGE_DIGEST: \$\{\{ steps\.build\.outputs\.digest \}\}/);
+  expect(workflow).toMatch(/for cli in claude codex opencode gemini kimi/);
+  for (const source of [workflow, dockerBuildTest]) {
+    expect(source).toContain("test ! -d /root/.npm/_cacache");
+    expect(source).toContain('find /opt/paperclip-cli-tools/node_modules -maxdepth 2 -type d -name "*-musl"');
+  }
 });
 
 

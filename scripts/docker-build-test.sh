@@ -34,13 +34,21 @@ echo "==> Testing Docker build with $RUNTIME"
 echo "==> Verifying key binaries in image"
 "$RUNTIME" run --rm "$IMAGE_TAG" sh -c '
   set -e
+  test ! -d /root/.npm/_cacache
+  if find /opt/paperclip-cli-tools/node_modules -maxdepth 2 -type d -name "*-musl" | grep -q .; then
+    echo "ERROR: incompatible musl CLI binaries installed in the glibc image" >&2
+    exit 1
+  fi
   node --version
   git --version
   gh --version
   rg --version
   python3 --version
   curl --version | head -1
-  claude --version 2>/dev/null || echo "claude CLI not found (OK in minimal builds)"
+  for cli in claude codex opencode gemini kimi; do
+    command -v "$cli"
+    "$cli" --version
+  done
 '
 
 echo "==> Verifying PID 1 is an init that reaps adopted orphans"

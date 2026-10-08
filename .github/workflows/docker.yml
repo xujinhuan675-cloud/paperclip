@@ -111,13 +111,6 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Stamping build version: ${version:-<none>}"
 
-      # ISO week stamp for the Dockerfile's tool layer: the layer caches
-      # across commits and re-pulls the @latest CLI tools when the week rolls
-      # over, instead of on every build.
-      - name: Compute tool cache epoch
-        id: tools-epoch
-        run: echo "epoch=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -151,11 +144,19 @@ jobs:
 
           echo "Using refreshed pnpm-lock.yaml in the Docker build context."
 
-      - name: Free runner disk
+      - name: Check runner disk headroom
         run: |
           set -euo pipefail
           echo "Disk before cleanup:"
           df -h
+
+          # Native runners already have ample space on many runs. Preserve a
+          # conservative 80 GiB headroom before skipping destructive cleanup.
+          available_kib="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')"
+          if [[ "$available_kib" =~ ^[0-9]+$ ]] && [ "$available_kib" -ge $((80 * 1024 * 1024)) ]; then
+            echo "At least 80 GiB available; no disk cleanup needed."
+            exit 0
+          fi
 
           pnpm store prune || true
           sudo apt-get clean || true
@@ -232,7 +233,6 @@ jobs:
           build-args: |
             PAPERCLIP_BUILD_VERSION=${{ steps.build-version.outputs.version }}
             PAPERCLIP_BUILD_COMMIT=${{ github.sha }}
-            CLI_TOOLS_CACHE_EPOCH=${{ steps.tools-epoch.outputs.epoch }}
           platforms: ${{ matrix.platform }}
           # By digest, not by tag: two runners cannot each push the same tag
           # and end up with a manifest list. Each leg publishes an untagged
@@ -249,6 +249,32 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-${{ matrix.arch }}
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-${{ matrix.arch }},mode=max
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Record disk after image build
+        if: always()
+        run: df -h
+
+      - name: Check compressed runtime image budget
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: node scripts/check-docker-layer-budget.mjs "ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST}" "${{ matrix.arch }}"
+
+      - name: Verify bundled local-agent CLIs
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker run --rm --pull always "ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST}" sh -ec '
+            test ! -d /root/.npm/_cacache
+            if find /opt/paperclip-cli-tools/node_modules -maxdepth 2 -type d -name "*-musl" | grep -q .; then
+              echo "ERROR: incompatible musl CLI binaries installed in the glibc image" >&2
+              exit 1
+            fi
+            for cli in claude codex opencode gemini kimi; do
+              command -v "$cli"
+              "$cli" --version
+            done
+          '
 
       # The digest is the only thing `merge` needs from this job. Carried as an
       # empty file named for it, which is the upstream pattern — the name is

@@ -49,7 +49,9 @@ COPY packages/plugins/plugin-workspace-diff/package.json packages/plugins/plugin
 COPY patches/ patches/
 COPY scripts/link-plugin-dev-sdk.mjs scripts/
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=paperclip-pnpm-store,target=/pnpm/store,sharing=locked \
+  pnpm config set store-dir /pnpm/store \
+  && pnpm install --frozen-lockfile
 
 FROM base AS rust-toolchain
 WORKDIR /app
@@ -144,30 +146,37 @@ RUN pnpm --filter @paperclipai/server build
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
 RUN rm -rf packages/paperclip-runner/runner/target
 
+FROM build AS production-files
+RUN rm -rf /app/node_modules
+
 FROM base AS production
 ARG USER_UID=1000
 ARG USER_GID=1000
-# Refreshes the tool layer below when it changes (CI stamps an ISO week, so
-# the @latest CLI tools advance weekly). Without it the cached layer would
-# freeze the tools until an unrelated cache bust.
-ARG CLI_TOOLS_CACHE_EPOCH=""
 WORKDIR /app
-# Tool and OS layer BEFORE the app copy: it references nothing from /app, and
-# the app copy changes on every commit — ordered the other way around, this
-# (the single most expensive layer: four CLI toolchains + apt, per arch) can
-# never hit the layer cache and rebuilds on every build.
-RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
-  && npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai @google/gemini-cli@latest @moonshot-ai/kimi-code@latest \
-  && apt-get update \
+# Keep OS packages independent from CLI version refreshes.
+RUN apt-get update \
   && apt-get install -y --no-install-recommends openssh-client jq \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 
+# Dependabot updates this standalone lock independently from application source,
+# so ordinary commits reuse the complete local-adapter CLI runtime layer.
+COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/
+# Keep downloaded tarballs outside the runtime filesystem and image layers.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --prefix /opt/paperclip-cli-tools --omit=dev --no-audit --no-fund
+ENV PATH=/opt/paperclip-cli-tools/node_modules/.bin:$PATH
+
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-COPY --chown=node:node --from=build /app /app
+# The workspace store is stable across source-only changes. Keep it separate
+# so deploying application code does not republish the dependency payload.
+COPY --chown=node:node --from=deps /app/node_modules /app/node_modules
+# The intermediate stage removes only the root store; package-level
+# node_modules links remain and resolve through the separately copied store.
+COPY --chown=node:node --from=production-files /app /app
 
 # Declare per-build metadata after the stable RUN layers. Docker includes
 # in-scope ARG values in a RUN's environment even when its command does not
