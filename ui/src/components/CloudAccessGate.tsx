@@ -8,6 +8,13 @@ import { queryKeys } from "@/lib/queryKeys";
 import { BootstrapPendingPage } from "@/components/BootstrapPendingPage";
 import { PaperclipLoading } from "@/components/AnimatedPaperclipIcon";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+
+function retryAppRead(failureCount: number, error: Error) {
+  if (error instanceof ApiError && error.status < 500) return false;
+  return failureCount < 1;
+}
 
 function NoBoardAccessPage() {
   return (
@@ -32,7 +39,7 @@ export function CloudAccessGate({ allowMembershipRequest = false }: { allowMembe
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
     queryFn: () => healthApi.get(),
-    retry: false,
+    retry: retryAppRead,
     refetchInterval: (query) => {
       const data = query.state.data as
         | { deploymentMode?: "local_trusted" | "authenticated"; bootstrapStatus?: "ready" | "bootstrap_pending" }
@@ -50,14 +57,14 @@ export function CloudAccessGate({ allowMembershipRequest = false }: { allowMembe
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
     enabled: isAuthenticatedMode,
-    retry: false,
+    retry: retryAppRead,
   });
 
   const boardAccessQuery = useQuery({
     queryKey: queryKeys.access.currentBoardAccess,
     queryFn: () => accessApi.getCurrentBoardAccess(),
     enabled: isAuthenticatedMode && !isBootstrapPending && !!sessionQuery.data,
-    retry: false,
+    retry: retryAppRead,
   });
   const claimMutation = useMutation({
     mutationFn: () => accessApi.claimBootstrapAdmin(),
@@ -78,14 +85,19 @@ export function CloudAccessGate({ allowMembershipRequest = false }: { allowMembe
     return <PaperclipLoading />;
   }
 
-  if (healthQuery.error || boardAccessQuery.error) {
+  const loadError = healthQuery.error || (isAuthenticatedMode && sessionQuery.error) || boardAccessQuery.error;
+  if (loadError) {
     return (
-      <div className="mx-auto max-w-xl py-10 text-sm text-destructive">
-        {healthQuery.error instanceof Error
-          ? healthQuery.error.message
-          : boardAccessQuery.error instanceof Error
-            ? boardAccessQuery.error.message
-            : "Failed to load app state"}
+      <div className="mx-auto flex max-w-xl flex-col items-start gap-4 py-10 text-sm" role="alert">
+        <p className="text-destructive">{loadError instanceof Error ? loadError.message : "Failed to load app state"}</p>
+        <Button variant="outline" disabled={healthQuery.isFetching || sessionQuery.isFetching || boardAccessQuery.isFetching}
+          onClick={() => {
+            if (healthQuery.error) void healthQuery.refetch();
+            else if (sessionQuery.error) void sessionQuery.refetch();
+            else void boardAccessQuery.refetch();
+          }}>
+          <RefreshCw className="mr-2 h-4 w-4" />Try again
+        </Button>
       </div>
     );
   }

@@ -5,9 +5,14 @@ import {
 } from "@/lib/tenant-session-recovery";
 import { healthApi } from "./health";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("exits a stalled health lookup instead of loading indefinitely", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+  const rejected = expect(healthApi.get()).rejects.toMatchObject({ name: "RequestTimeoutError" });
+  await vi.advanceTimersByTimeAsync(30_000);
+  await rejected;
 });
 
 describe("healthApi", () => {
@@ -22,15 +27,10 @@ describe("healthApi", () => {
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
-
     const request = healthApi.get();
     await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-
     let settled = false;
-    void request.then(
-      () => { settled = true; },
-      () => { settled = true; },
-    );
+    void request.then(() => { settled = true; }, () => { settled = true; });
     await Promise.resolve();
     expect(settled).toBe(false);
   });

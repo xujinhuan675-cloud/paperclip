@@ -6,11 +6,19 @@ import {
 import { authApi } from "./auth";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("authApi.getSession", () => {
+  it("exits a stalled session lookup instead of loading indefinitely", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+    const rejected = expect(authApi.getSession()).rejects.toMatchObject({ name: "RequestTimeoutError" });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejected;
+  });
   it("returns null for an ordinary local 401", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "unauthorized" }), {

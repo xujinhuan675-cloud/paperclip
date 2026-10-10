@@ -10,6 +10,7 @@ import {
 } from "@paperclipai/shared";
 import { redactUrlSecrets } from "@/lib/redact-url-secrets";
 import { tenantSessionRecovery } from "@/lib/tenant-session-recovery";
+import { withReadDeadline } from "./read-deadline";
 
 type AuthErrorBody =
   | {
@@ -155,11 +156,14 @@ async function authPatch<T>(path: string, body: Record<string, unknown>, parse: 
 
 export const authApi = {
   getSession: async (): Promise<AuthSession | null> => {
-    const res = await fetch("/api/auth/get-session", {
-      credentials: "include",
-      headers: { Accept: "application/json" },
+    const { res, payload } = await withReadDeadline(async (signal) => {
+      const res = await fetch("/api/auth/get-session", {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+        signal,
+      });
+      return { res, payload: await res.json().catch(() => null) };
     });
-    const payload = await res.json().catch(() => null);
     if (!res.ok) {
       const recovery = tenantSessionRecovery.recoverIfNeeded(res.status, payload);
       if (recovery) return recovery;

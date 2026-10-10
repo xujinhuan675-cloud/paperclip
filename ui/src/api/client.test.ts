@@ -37,8 +37,39 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("read deadlines", () => {
+  it("releases a stalled GET and permits a fresh request", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockReturnValueOnce(new Promise(() => {}));
+    const stalled = api.get("/stalled-read");
+    const rejected = expect(stalled).rejects.toMatchObject({ name: "RequestTimeoutError" });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejected;
+    expect(__inflightGetCount()).toBe(0);
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ recovered: true }));
+    expect(await api.get("/stalled-read")).toEqual({ recovered: true });
+  });
+
+  it("includes response-body reads in the deadline", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => new Promise(() => {}) });
+    const rejected = expect(api.get("/stalled-body")).rejects.toMatchObject({ name: "RequestTimeoutError" });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejected;
+  });
+
+  it("never replays a failed mutation", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await expect(api.post("/mutation-network-error", {})).rejects.toThrow("Failed to fetch");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("tenant-session recovery", () => {
