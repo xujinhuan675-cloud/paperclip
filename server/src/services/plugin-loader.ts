@@ -51,6 +51,8 @@ import type { PluginToolDispatcher } from "./plugin-tool-dispatcher.js";
 import type { PluginLifecycleManager } from "./plugin-lifecycle.js";
 import { pluginDatabaseService } from "./plugin-database.js";
 import { resolveBundledCatalogRoot } from "./bundled-plugins.js";
+import { resolveDevTsxLoaderExecArgv } from "./plugin-loader-paths.js";
+import { pluginWorkerNeedsTsx } from "./plugin-worker-runtime.js";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -2350,8 +2352,8 @@ export function pluginLoader(
       // Repo-local plugin installs can resolve workspace TS sources at runtime
       // (for example @paperclipai/shared exports). Run those workers through
       // the tsx loader so first-party example plugins work in development.
-      if (activePlugin.packagePath && existsSync(DEV_TSX_LOADER_PATH)) {
-        workerOptions.execArgv = ["--import", DEV_TSX_LOADER_PATH];
+      if (activePlugin.packagePath && existsSync(DEV_TSX_LOADER_PATH) && pluginWorkerNeedsTsx(packageRoot, workerEntrypoint)) {
+        workerOptions.execArgv = resolveDevTsxLoaderExecArgv(DEV_TSX_LOADER_PATH);
       }
 
       await workerManager.startWorker(pluginId, workerOptions);
