@@ -1,5 +1,6 @@
 import { getPageVisibility, getVisibilityHeaderValue } from "@/lib/page-visibility";
 import { tenantSessionRecovery } from "@/lib/tenant-session-recovery";
+import { withReadDeadline } from "./read-deadline";
 
 const BASE = "/api";
 
@@ -50,13 +51,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   applyObservabilityHeaders(headers);
 
-  const res = await fetch(`${BASE}${path}`, {
-    headers,
-    credentials: "include",
-    ...init,
-  });
+  const read = async (signal?: AbortSignal | null) => {
+    const res = await fetch(`${BASE}${path}`, {
+      credentials: "include",
+      ...init,
+      headers,
+      signal,
+    });
+    const payload = res.status === 204 ? undefined
+      : res.ok ? await res.json() : await res.json().catch(() => null);
+    return { res, payload };
+  };
+  const { res, payload } = init?.method === "GET"
+    ? await withReadDeadline(read, init.signal)
+    : await read(init?.signal);
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => null);
+    const errorBody = payload;
     const recovery = tenantSessionRecovery.recoverIfNeeded(res.status, errorBody);
     if (recovery) return recovery;
     throw new ApiError(
@@ -66,7 +76,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   if (res.status === 204) return undefined as T;
-  return res.json();
+  return payload as T;
 }
 
 // --- In-tab request coalescing for identical safe GETs -----------------------

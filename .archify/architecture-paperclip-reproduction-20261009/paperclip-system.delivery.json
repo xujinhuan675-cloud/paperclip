@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "9b03adab-284f-4dd5-bb79-749d4c199c27",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "F:\\AnchorOS\\paperclip\\.archify\\architecture-paperclip-reproduction-20261009\\candidate.json",
+  "output": "F:\\AnchorOS\\paperclip\\.archify\\architecture-paperclip-reproduction-20261009\\paperclip-system.html",
+  "specification": {
+    "sha256": "ebb58642eddda7023a387f78d0edb2d379b6b3c21a44aec8c272e78ae59e0fdd",
+    "bytes": 3562
+  },
+  "artifact": {
+    "sha256": "520d891d30618ab94cdc712c37df67bd2b8dd072178d27aaca7335c7c3912f3d",
+    "bytes": 761845
+  }
+}

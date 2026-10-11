@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Paperclip Core Control Plane", "subtitle": "Board to Agent execution, governance, budget and audit", "locale": "en", "quality_profile": "showcase", "output": ".archify/architecture-paperclip-reproduction-20261009/paperclip-system.html", "repository": { "url": "https://github.com/xujinhuan675-cloud/paperclip.git", "provider": "github", "link_mode": "web", "revision": "ca61e19f6319a6898fd9e438fb244489c6f40b13" } },
+  "components": [
+    { "id": "board", "type": "frontend", "label": "Board UI", "sublabel": "tasks, agents, approvals, costs", "pos": [40,100], "size": [220,76], "sources": [{ "path": "doc/SPEC-implementation.md", "line": 1410, "end_line": 1428 }] },
+    { "id": "api", "type": "backend", "label": "Express API", "sublabel": "createApp and routes", "pos": [340,100], "size": [220,76], "sources": [{ "path": "server/src/app.ts", "line": 459, "end_line": 598 }] },
+    { "id": "issue", "type": "backend", "label": "Issue Service", "sublabel": "single assignee and atomic checkout", "pos": [640,100], "size": [240,76], "sources": [{ "path": "doc/SPEC-implementation.md", "line": 230, "end_line": 280 }] },
+    { "id": "heartbeat", "type": "backend", "label": "Heartbeat Service", "sublabel": "invoke, observe, cancel, recover", "pos": [960,100], "size": [240,76], "sources": [{ "path": "doc/SPEC-implementation.md", "line": 1194, "end_line": 1290 }] },
+    { "id": "adapter", "type": "external", "label": "Agent Adapters", "sublabel": "process, http and local runtimes", "pos": [1280,100], "size": [230,76], "sources": [{ "path": "doc/SPEC-implementation.md", "line": 1217, "end_line": 1258 }] },
+    { "id": "governance", "type": "security", "label": "Approval and Auth", "sublabel": "company and actor boundaries", "pos": [640,330], "size": [240,76], "sources": [{ "path": "doc/SPEC-implementation.md", "line": 550, "end_line": 585 }] },
+    { "id": "budget", "type": "security", "label": "Cost and Budget", "sublabel": "cost events and hard stop", "pos": [960,330], "size": [240,76], "sources": [{ "path": "doc/SPEC-implementation.md", "line": 1363, "end_line": 1405 }] },
+    { "id": "db", "type": "database", "label": "PostgreSQL via Drizzle", "sublabel": "embedded by default", "pos": [1280,330], "size": [240,76], "sources": [{ "path": "doc/DATABASE.md", "line": 1, "end_line": 23 }] }
+  ],
+  "boundaries": [{ "kind": "region", "label": "Paperclip control plane", "wraps": ["api","issue","heartbeat","governance","budget"] }],
+  "connections": [
+    { "id": "a", "from": "board", "to": "api", "label": "board actions", "variant": "emphasis" },
+    { "id": "b", "from": "api", "to": "issue", "label": "checkout", "variant": "emphasis" },
+    { "id": "c", "from": "issue", "to": "heartbeat", "label": "invoke", "variant": "emphasis" },
+    { "id": "d", "from": "heartbeat", "to": "adapter", "label": "execute", "variant": "emphasis" },
+    { "id": "e", "from": "governance", "to": "issue", "label": "approval and permission", "variant": "security" },
+    { "id": "f", "from": "budget", "to": "heartbeat", "label": "admission gate", "variant": "security" },
+    { "id": "g", "from": "heartbeat", "to": "db", "label": "run events", "variant": "dashed" },
+    { "id": "h", "from": "budget", "to": "db", "label": "cost events", "variant": "dashed" }
+  ],
+  "cards": [{ "dot": "cyan", "title": "Reproduction order", "items": ["Start embedded PostgreSQL.", "Trace Company to Agent to Issue to Heartbeat.", "Add governance, budgets and isolation by release tag."] }]
+}

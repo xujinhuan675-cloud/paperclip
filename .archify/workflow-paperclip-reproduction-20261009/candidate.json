@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": { "title": "Paperclip Formal Release Reproduction Roadmap", "subtitle": "Follow published tags, reproduce each increment, keep evidence", "locale": "en", "quality_profile": "showcase", "output": ".archify/workflow-paperclip-reproduction-20261009/paperclip-reproduction-roadmap.html", "repository": { "url": "https://github.com/xujinhuan675-cloud/paperclip.git", "provider": "github", "link_mode": "web", "revision": "ca61e19f6319a6898fd9e438fb244489c6f40b13" } },
+  "lanes": [{ "id": "release", "label": "Formal release" }, { "id": "build", "label": "Reproduction" }, { "id": "proof", "label": "Evidence" }, { "id": "boundary", "label": "Boundary", "variant": "exception" }],
+  "phases": [{ "id": "base", "label": "Stable base", "fromCol": 0, "toCol": 1 }, { "id": "core", "label": "Control plane", "fromCol": 2, "toCol": 3, "variant": "emphasis" }, { "id": "current", "label": "Current line", "fromCol": 4, "toCol": 5, "variant": "security" }],
+  "mainPath": ["v027","v030","v031","v318","v428","v626","v831","v916","worktree"],
+  "nodes": [
+    { "id": "v027", "lane": "release", "col": 0, "type": "external", "label": "v0.2.7", "sublabel": "base", "tag": "formal tag", "sources": [{ "path": "releases/v0.2.7.md" }], "width": 90 },
+    { "id": "v030", "lane": "release", "col": 1, "type": "backend", "label": "v0.3.0", "sublabel": "V1", "tag": "formal tag", "sources": [{ "path": "releases/v0.3.0.md" }], "width": 90 },
+    { "id": "v031", "lane": "release", "col": 2, "type": "backend", "label": "v0.3.1", "sublabel": "stable", "tag": "formal tag", "sources": [{ "path": "releases/v0.3.1.md" }], "width": 90 },
+    { "id": "v318", "lane": "build", "col": 3, "type": "backend", "label": "v2026.318.0", "sublabel": "date line", "tag": "formal tag", "sources": [{ "path": "releases/v2026.318.0.md" }], "width": 90 },
+    { "id": "v428", "lane": "build", "col": 4, "type": "backend", "label": "v2026.428.0", "sublabel": "execution", "tag": "formal tag", "sources": [{ "path": "releases/v2026.428.0.md" }], "width": 90 },
+    { "id": "v626", "lane": "build", "col": 5, "type": "security", "label": "v2026.626.0", "sublabel": "governance", "tag": "formal tag", "sources": [{ "path": "releases/v2026.626.0.md" }], "width": 90 },
+    { "id": "v831", "lane": "proof", "col": 5, "type": "backend", "label": "v2026.831.1", "sublabel": "rehearsal", "tag": "formal tag", "sources": [{ "path": "releases/v2026.831.1.md" }], "width": 90 },
+    { "id": "v916", "lane": "boundary", "col": 5, "type": "cloud", "label": "v2026.916.0", "sublabel": "latest stable", "tag": "formal tag", "sources": [{ "path": "releases/v2026.916.0.md" }], "width": 90 },
+    { "id": "worktree", "lane": "release", "col": 5, "type": "security", "label": "Worktree", "sublabel": "dev snapshot", "tag": "development", "sources": [{ "path": "doc/SPEC-implementation.md", "line": 56, "end_line": 83 }], "width": 90 },
+    { "id": "evidence", "lane": "proof", "col": 0, "type": "database", "label": "Gate", "sublabel": "tests and isolation", "width": 110 }
+  ],
+  "edges": [
+    { "id": "a", "from": "v027", "to": "v030", "label": "checkout tag and reproduce", "role": "main", "variant": "emphasis" },
+    { "id": "b", "from": "v030", "to": "v031", "label": "upgrade and regress", "role": "main", "variant": "emphasis" },
+    { "id": "c", "from": "v031", "to": "v318", "label": "follow date releases", "role": "main", "variant": "emphasis" },
+    { "id": "d", "from": "v318", "to": "v428", "label": "reproduce release notes", "role": "main", "variant": "emphasis" },
+    { "id": "e", "from": "v428", "to": "v626", "label": "add governance and cost", "role": "main", "variant": "security" },
+    { "id": "f", "from": "v626", "to": "v831", "label": "stable full regression", "role": "main", "variant": "emphasis" },
+    { "id": "g", "from": "v831", "to": "v916", "label": "track latest stable", "role": "main", "variant": "emphasis" },
+    { "id": "h", "from": "v916", "to": "worktree", "label": "compare working tree", "role": "error", "variant": "security" },
+    { "id": "i", "from": "evidence", "to": "v027", "label": "run every release", "role": "branch", "variant": "dashed" }
+  ],
+  "cards": [{ "dot": "cyan", "title": "How to learn", "items": ["Checkout the formal tag.", "Read its release note.", "Reproduce the smallest meaningful capability.", "Record commands, tests, failures and upgrade differences."] }, { "dot": "rose", "title": "Boundary", "items": ["v2026.916.0 is the latest visible stable tag.", "ca61e19f is a working-tree snapshot, not a release.", "Canary, nightly and beta stay outside the formal mainline."] }]
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "21a724a5-4a33-4896-8365-65dfdf2f54cd",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "F:\\AnchorOS\\paperclip\\.archify\\workflow-paperclip-reproduction-20261009\\candidate.json",
+  "output": "F:\\AnchorOS\\paperclip\\.archify\\workflow-paperclip-reproduction-20261009\\paperclip-reproduction-roadmap.html",
+  "specification": {
+    "sha256": "084382cec37eebda90e64537f5de9535098ccab677d9697c42b61c3d987a8ac7",
+    "bytes": 4660
+  },
+  "artifact": {
+    "sha256": "9c8fa4bb2e4cdfa56826ced5dfae4609572195559931ba91d58a3759832b071b",
+    "bytes": 765219
+  }
+}
