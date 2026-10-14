@@ -83,5 +83,8 @@ test-results/
 # Generated Graphify indexes are local artifacts, not source inputs.
 graphify-out/
 
+# Generated Zread Wiki snapshots are local navigation artifacts, not source inputs.
+.zread/
+
 # Retained local lifecycle behavior measurements
 .lifecycle-baseline/
