@@ -11,7 +11,7 @@
 | 路线和能力状态 | `ROADMAP.md` | 当前与未来能力的区分 |
 | 真实执行链路 | `server/src/routes/`、`server/src/services/`、`packages/db/src/schema/`、`ui/src/` | 实现证据 |
 | 调用和依赖关系 | Code Review Graph | 影响范围和高耦合边界 |
-| 结构化公开导航 | Zread Wiki / 公开 Wiki | 辅助理解，不作为唯一事实来源 |
+| 结构化源码导航 | 本地 Zread Wiki / 公开 Wiki | 辅助理解；本地版绑定当前源码，公开版可能对应不同时间点 |
 
 ## 待决策
 
@@ -33,5 +33,12 @@
 
 ## Zread 状态
 
-本次尝试使用 Zread CLI 生成本地 Wiki，但 2026 年 10 月 11 日运行时返回 `LLM returned empty choices`，未生成 `.zread/wiki`。因此本次文档没有把 Zread 摘要当作唯一证据。后续若成功生成，应把 Wiki 作为导航层补充，并重新检查与源码的差异。
+初次生成在 2026 年 10 月 11 日返回 `LLM returned empty choices`。诊断确认原 API 基础路径缺少 `/v1`，请求得到 HTML 而非模型响应。仅在隔离的临时 Zread 配置中修正路径，保持全局配置不变，并复用草稿续跑；于 2026 年 10 月 12 日完成全部 30 页。
+
+- 正式版本：`2026-10-11-202459`；对应 Git HEAD：`da2f6e08facc9d8d32688c14e95331a941d92453`。
+- 原始结果：`.zread/wiki/versions/2026-10-11-202459/`；`current` 指向 `versions/2026-10-11-202459`。
+- Markdown 入口：`C:/Users/20843/Documents/Codex/2026-10-10/step-1-add-the-marketplace-codex/outputs/paperclip-zread-wiki/README.md`。
+- 已检查：30 页中文文件、1,883 条源码引用路径与行号；交付副本修正 11 处引用错误、规范化 13 处页间 slug 拼写偏差，原始生成结果未覆盖。
+- 未验证：所有业务结论、完整产品交互和端到端执行。Wiki 不解决上面的产品待决策项，也不自动升级为可执行需求契约。
+- 仅生成本地文件，未上传或公开发布到 zread.ai；临时凭据配置已移除。
 

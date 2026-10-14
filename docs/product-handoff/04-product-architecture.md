@@ -71,5 +71,7 @@ Code Review Graph 显示 `services-issue`、`src-tool` 和 `components-issue` �
 
 ## 当前证据限制
 
-Zread CLI 已尝试生成本地 Wiki，但本次运行因 LLM 返回空 choices 失败，没有产生 `.zread/wiki`。因此本目录以本地源码、源码文档和 Code Review Graph 为主要依据；公开 Wiki 仅作为辅助导航，不作为唯一事实来源。
+2026 年 10 月 11 日的初次生成因 `LLM returned empty choices` 失败；修正临时配置中的 API 基础路径后，Zread CLI 已于 2026 年 10 月 12 日完成 30 页中文本地 Wiki。版本为 `2026-10-11-202459`，原始结果位于 `.zread/wiki/versions/2026-10-11-202459/`，当前版本指针为 `.zread/wiki/current`。
+
+可阅读的 Markdown 交付副本位于 `C:/Users/20843/Documents/Codex/2026-10-10/step-1-add-the-marketplace-codex/outputs/paperclip-zread-wiki/README.md`。副本已核对 1,883 条源码引用的路径和行号，修正 11 处引用错误并规范化 13 处页间 slug 拼写偏差。该检查不证明全部业务结论正确；本目录仍以本地源码、测试和有效规范为依据，Wiki 与 Code Review Graph 用作导航，不替代产品交接规格。
 

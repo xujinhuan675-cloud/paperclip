@@ -65,7 +65,7 @@ python3 tests/runner-e2e/everyday-artifact.py --preflight
 The harness checks this prerequisite before it creates the task. It does not
 pull an image during a model attempt or fall back to host execution.
 
-Use the credential and immutable Daytona image setup in [README.md](README.md).
+Use the credential and immutable Daytona image setup in [README.md](6-项目仓库/paperclip/tests/runner-e2e/README.md).
 Provider calls cost money. Each cell owns an isolated instance and project.
 There are no real third-party mutations in the service fixture; it exercises
 production connection, transport, tool approval, and document delivery paths.
