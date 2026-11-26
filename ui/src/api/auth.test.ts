@@ -6,19 +6,31 @@ import {
 import { authApi } from "./auth";
 
 afterEach(() => {
-  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("authApi.getSession", () => {
-  it("exits a stalled session lookup instead of loading indefinitely", async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
-    const rejected = expect(authApi.getSession()).rejects.toMatchObject({ name: "RequestTimeoutError" });
-    await vi.advanceTimersByTimeAsync(30_000);
-    await rejected;
+  it("keeps a valid session when optional bootstrap is malformed or belongs to another account", async () => {
+    const session = { session: { id: "session", userId: "one" },
+      user: { id: "one", email: "one@example.com", name: "One", image: null }, sentryDsn: null };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ...session, boardBootstrap: {
+      userId: "two", companies: [], boardAccess: { userId: "two", isInstanceAdmin: true, companyIds: ["foreign"] },
+    } }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await authApi.getSession()).toEqual(session);
+    fetchMock.mockResolvedValue(Response.json({ ...session, boardBootstrap: { userId: "one", companies: "invalid" } }));
+    expect(await authApi.getSession()).toEqual(session);
   });
+
+  it("retains a same-account bootstrap alongside the ordinary session", async () => {
+    const session = { session: { id: "session", userId: "one" },
+      user: { id: "one", email: "one@example.com", name: "One", image: null }, sentryDsn: null };
+    const boardBootstrap = { userId: "one", companies: [], boardAccess: { userId: "one", isInstanceAdmin: false, companyIds: [] } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ...session, boardBootstrap })));
+    expect(await authApi.getSession()).toEqual({ ...session, boardBootstrap });
+  });
+
   it("returns null for an ordinary local 401", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "unauthorized" }), {
