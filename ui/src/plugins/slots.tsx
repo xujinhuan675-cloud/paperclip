@@ -45,6 +45,7 @@ import { queryViewKind } from "@/components/QueryView";
 import { queryKeys } from "@/lib/queryKeys";
 import { rememberPluginModuleUrl } from "@/lib/plugin-module-origins";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/i18n";
 import {
   PluginBridgeContext,
   type PluginHostContext,
@@ -59,6 +60,7 @@ export type PluginSlotContext = {
   /** Parent entity ID for nested slots (e.g. comment annotations within an issue). */
   parentEntityId?: string | null;
   projectRef?: string | null;
+  locale?: string;
 };
 
 export type ResolvedPluginSlot = PluginUiSlotDeclaration & {
@@ -818,6 +820,7 @@ type PluginSlotMountProps = {
 function slotContextToHostContext(
   pluginSlotContext: PluginSlotContext,
   userId: string | null,
+  locale: string,
 ): PluginHostContext {
   return {
     companyId: pluginSlotContext.companyId ?? null,
@@ -827,6 +830,7 @@ function slotContextToHostContext(
     entityType: pluginSlotContext.entityType ?? null,
     parentEntityId: pluginSlotContext.parentEntityId ?? null,
     userId,
+    locale,
     renderEnvironment: null,
   };
 }
@@ -850,8 +854,10 @@ function PluginBridgeScope({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
   });
+  const { i18n } = useTranslation();
   const userId = session?.user?.id ?? session?.session?.userId ?? null;
-  const hostContext = useMemo(() => slotContextToHostContext(context, userId), [context, userId]);
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const hostContext = useMemo(() => slotContextToHostContext(context, userId, locale), [context, locale, userId]);
   const value = useMemo(() => ({ pluginId, hostContext }), [pluginId, hostContext]);
 
   return (
@@ -870,6 +876,11 @@ export function PluginSlotMount({
   fallback,
 }: PluginSlotMountProps) {
   usePluginRegistrySubscription();
+  const { i18n } = useTranslation();
+  const pluginContext = useMemo(
+    () => ({ ...context, locale: i18n.resolvedLanguage ?? i18n.language }),
+    [context, i18n.language, i18n.resolvedLanguage],
+  );
   const [, forceRerender] = useState(0);
   const component = resolveRegisteredComponent(slot);
 
@@ -901,10 +912,10 @@ export function PluginSlotMount({
   }
 
   if (component.kind === "react") {
-    const node = createElement(component.component, { ...componentProps, slot, context });
+    const node = createElement(component.component, { ...componentProps, slot, context: pluginContext });
     return (
       <PluginSlotErrorBoundary key={`${slot.pluginId}:${slot.pluginVersion}:${slot.id}`} slot={slot} className={className} fallback={fallback}>
-        <PluginBridgeScope pluginId={slot.pluginId} context={context}>
+        <PluginBridgeScope pluginId={slot.pluginId} context={pluginContext}>
           {className ? <div className={className}>{node}</div> : node}
         </PluginBridgeScope>
       </PluginSlotErrorBoundary>
@@ -918,7 +929,7 @@ export function PluginSlotMount({
       <PluginWebComponentMount
         tagName={component.tagName}
         slot={slot}
-        context={context}
+        context={pluginContext}
         className={className}
       />
     </PluginSlotErrorBoundary>

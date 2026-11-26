@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
   Flag,
+  Languages,
   LogOut,
   Settings,
   type LucideIcon,
@@ -29,6 +30,7 @@ import { cn } from "../lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 import { SidebarServerInfo } from "./SidebarServerInfo";
 import { TruncatedText } from "./TruncatedText";
+import { setLocale, useTranslation } from "../i18n";
 
 const INVITES_PATH = "/company/settings/members?tab=invites";
 const DOCS_URL = "https://docs.paperclip.ing/";
@@ -143,6 +145,7 @@ export function SidebarAccountMenu({
     !hidesCompanyPage(hiddenSettings, "company.invites");
   const [internalOpen, setInternalOpen] = useState(false);
   const { isMobile, setSidebarOpen } = useSidebar();
+  const { i18n: translationI18n } = useTranslation();
   const open = controlledOpen ?? internalOpen;
   const stagingCommit = useStagingCommit(open);
   const setOpen = onOpenChange ?? setInternalOpen;
@@ -158,6 +161,7 @@ export function SidebarAccountMenu({
     session?.user.email?.trim() || (deploymentMode === "authenticated" ? "Signed in" : "Local workspace board");
   const initials = deriveInitials(displayName);
   const profileHref = userProfilePath(session?.user);
+  const isChinese = (translationI18n.resolvedLanguage ?? translationI18n.language).toLowerCase().startsWith("zh");
 
   function closeNavigationChrome() {
     setOpen(false);
@@ -252,6 +256,14 @@ export function SidebarAccountMenu({
                 href={DOCS_URL}
                 external
                 onClick={() => setOpen(false)}
+              />
+              <MenuAction
+                label={isChinese ? "Language: English" : "语言：中文"}
+                icon={Languages}
+                onClick={() => {
+                  setLocale(isChinese ? "en" : "zh-CN");
+                  closeNavigationChrome();
+                }}
               />
               <ThemeToggle variant="compact-menu-action" onAfterToggle={() => setOpen(false)} />
               {deploymentMode === "authenticated" ? (

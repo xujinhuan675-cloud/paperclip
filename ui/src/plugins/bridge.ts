@@ -112,6 +112,7 @@ export interface PluginHostContext {
   entityType: string | null;
   parentEntityId?: string | null;
   userId: string | null;
+  locale?: string;
   renderEnvironment?: PluginRenderEnvironmentContext | null;
 }
 

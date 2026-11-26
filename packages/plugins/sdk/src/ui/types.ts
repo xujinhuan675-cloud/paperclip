@@ -104,6 +104,8 @@ export interface PluginHostContext {
   parentEntityId?: string | null;
   /** UUID of the current authenticated user. */
   userId: string | null;
+  /** Active Paperclip UI locale (for example, `en` or `zh-CN`). */
+  locale?: string;
   /** Runtime metadata for the host container currently rendering this plugin UI. */
   renderEnvironment?: PluginRenderEnvironmentContext | null;
 }

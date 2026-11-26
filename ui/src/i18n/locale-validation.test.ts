@@ -1,10 +1,33 @@
-import { describe, expect, it } from "vitest";
-import { t } from ".";
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { i18n, LOCALE_STORAGE_KEY, setLocale, t } from ".";
 import en from "./locales/en.json";
 import { localeMessages } from "./locales";
 import { validateLocaleMessages } from "./locale-validation";
 
 describe("locale validation", () => {
+  beforeEach(async () => {
+    localStorage.clear();
+    await i18n.changeLanguage("en");
+  });
+
+  afterEach(async () => {
+    localStorage.clear();
+    await i18n.changeLanguage("en");
+  });
+
+  it("persists and applies a selected locale for the host UI", async () => {
+    setLocale("zh-CN");
+    await i18n.changeLanguage("zh-CN");
+
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("zh-CN");
+    expect(i18n.resolvedLanguage).toBe("zh-CN");
+
+    setLocale("en");
+    await i18n.changeLanguage("en");
+  });
+
   it("resolves English messages with key and default fallbacks", () => {
     expect(t("app.noCompanies.title")).toBe(en.app.noCompanies.title);
     expect(t("app.missing", { defaultValue: "Fallback" })).toBe("Fallback");

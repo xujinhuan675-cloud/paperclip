@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate, useLocation } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/i18n";
 import {
   PluginBridgeContext,
   type PluginHostContext,
@@ -53,6 +54,7 @@ export type PluginLauncherContext = {
   projectRef?: string | null;
   entityId?: string | null;
   entityType?: PluginUiSlotEntityType | null;
+  locale?: string;
 };
 
 export type ResolvedPluginLauncher = PluginLauncherDeclaration & {
@@ -137,6 +139,7 @@ function buildLauncherHostContext(
   context: PluginLauncherContext,
   renderEnvironment: PluginRenderEnvironmentContext | null,
   userId: string | null,
+  locale: string,
 ): PluginHostContext {
   return {
     companyId: context.companyId ?? null,
@@ -145,6 +148,7 @@ function buildLauncherHostContext(
     entityId: context.entityId ?? null,
     entityType: context.entityType ?? null,
     userId,
+    locale,
     renderEnvironment,
   };
 }
@@ -455,9 +459,11 @@ function LauncherRenderContent({
     queryFn: () => authApi.getSession(),
   });
   const userId = session?.user?.id ?? session?.session?.userId ?? null;
+  const { i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const hostContext = useMemo(
-    () => buildLauncherHostContext(instance.hostContext, renderEnvironment, userId),
-    [instance.hostContext, renderEnvironment, userId],
+    () => buildLauncherHostContext(instance.hostContext, renderEnvironment, userId, locale),
+    [instance.hostContext, locale, renderEnvironment, userId],
   );
 
   if (!component) {
