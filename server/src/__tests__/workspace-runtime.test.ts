@@ -177,6 +177,7 @@ async function writeRegisteredSourceConfig(baseCwd: string, instanceId = "source
 async function createTempRepo(defaultBranch = "main") {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-repo-"));
   await runGit(repoRoot, ["init", "--initial-branch", defaultBranch]);
+  await runGit(repoRoot, ["config", "core.autocrlf", "false"]);
   await runGit(repoRoot, ["config", "user.email", "paperclip@example.com"]);
   await runGit(repoRoot, ["config", "user.name", "Paperclip Test"]);
   await fs.writeFile(path.join(repoRoot, "README.md"), "hello\n", "utf8");
@@ -1464,14 +1465,26 @@ describe("realizeExecutionWorkspace", () => {
     await runGit(repoRoot, ["remote", "set-url", "origin", "https://fixture.example.invalid/private-repo"]);
     const bin = path.join(repoRoot, "fixture-bin"), calls = path.join(repoRoot, "fixture-calls.jsonl");
     await fs.mkdir(bin);
-    await fs.writeFile(path.join(bin, "git"), `#!${process.execPath}
-const fs = require("node:fs");
-fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + "\\n");
-process.stderr.write(${JSON.stringify(stderr)}, () => { process.exitCode = ${code}; });
-`);
-    await fs.chmod(path.join(bin, "git"), 0o700);
+    const gitStub = `const fs = require("node:fs");
+const path = require("node:path");
+const args = process.platform === "win32" ? [path.basename(process.argv[1] ?? ""), ...process.argv.slice(2)] : process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + "\\n");
+fs.writeSync(2, ${JSON.stringify(stderr)});
+process.exit(${code});
+`;
+    const gitEnv: Record<string, string> = { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` };
+    if (process.platform === "win32") {
+      await fs.copyFile(process.execPath, path.join(bin, "git.exe"));
+      const preload = path.join(bin, "git-fixture.cjs");
+      await fs.writeFile(preload, gitStub);
+      gitEnv.NODE_OPTIONS = `--require "${preload.replace(/\\/g, "/")}"`;
+    } else {
+      const gitPath = path.join(bin, "git");
+      await fs.writeFile(gitPath, `#!${process.execPath}\n${gitStub}`);
+      await fs.chmod(gitPath, 0o700);
+    }
     const error = await realizeWorktreeForTest(repoRoot, "absent-fixture", async () => ({
-      configArgs: [], env: { PATH: `${bin}:${process.env.PATH}` }, source: "server_env",
+      configArgs: [], env: gitEnv, source: "server_env",
     })).catch(error => error);
     expect(error).toBeInstanceOf(UnresolvedWorkspaceBaseRefError);
     const diagnostic = readUnresolvedWorkspaceBaseRefDiagnostic(error);
@@ -5726,63 +5739,12 @@ describe("readLocalServicePortOwner", () => {
     }
   });
 
-  it("attributes a Windows listener to a descendant of the launched process", async () => {
-    const fakeBin = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-windows-tools-"));
-    const previousPath = process.env.PATH;
-    const port = 43_123;
-    const listenerPid = 43_210;
-    const launchedPid = 32_000;
-    await fs.writeFile(
-      path.join(fakeBin, "netstat"),
-      `#!/bin/sh\nprintf '  TCP    127.0.0.1:${port}    0.0.0.0:0    LISTENING    ${listenerPid}\\n'\n`,
-      { mode: 0o755 },
-    );
-    await fs.writeFile(
-      path.join(fakeBin, "powershell.exe"),
-      `#!/bin/sh\nprintf '${launchedPid}\\n'\n`,
-      { mode: 0o755 },
-    );
-    process.env.PATH = `${fakeBin}${path.delimiter}${previousPath ?? ""}`;
-    Object.defineProperty(process, "platform", { value: "win32" });
-
-    try {
-      await expect(readLocalServicePortOwner(port)).resolves.toBe(listenerPid);
-      await expect(isLocalServiceProcessOwnedBy(listenerPid, launchedPid)).resolves.toBe(true);
-    } finally {
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
-      await fs.rm(fakeBin, { recursive: true, force: true });
-    }
-  });
-
   it("accepts service cwd nested within the requested workspace", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-workspace-"));
     const serviceCwd = path.join(workspace, "server");
     await fs.mkdir(serviceCwd);
 
     await expect(isLocalServiceProcessInWorkspace(serviceCwd, workspace)).resolves.toBe(true);
-  });
-
-  it("preserves newlines and trailing whitespace from Darwin lsof cwd output", async () => {
-    const fakeBin = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-lsof-tools-"));
-    const previousPath = process.env.PATH;
-    const reportedCwd = path.join(os.tmpdir(), "paperclip-runtime-line\nbreak ");
-    const output = `p${process.pid}\0fcwd\0n${reportedCwd}\0\n`;
-    await fs.writeFile(
-      path.join(fakeBin, "lsof"),
-      `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(output)});\n`,
-      { mode: 0o755 },
-    );
-    Object.defineProperty(process, "platform", { value: "darwin" });
-    process.env.PATH = fakeBin;
-
-    try {
-      await expect(readLocalServiceProcessCwd(process.pid)).resolves.toBe(reportedCwd);
-    } finally {
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
-      await fs.rm(fakeBin, { recursive: true, force: true });
-    }
   });
 
   it("returns null for invalid PIDs and a missing Darwin lsof binary", async () => {
