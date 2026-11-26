@@ -16,7 +16,7 @@ const commit = (root, message) => { git(root, "add", "-A"); git(root, "-c", "use
 const roots = [];
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const blob = bytes => createHash("sha1").update(`blob ${Buffer.byteLength(bytes)}\0`).update(bytes).digest("hex");
-const git = (root, ...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const git = (root, ...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false", ...args], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 async function put(root, file, bytes) { await mkdir(path.dirname(path.join(root, file)), { recursive: true }); await writeFile(path.join(root, file), bytes); }
 async function fixture() {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "sdk-input-sync-"))); roots.push(root);

@@ -2,3 +2,17 @@ patches/*.patch whitespace=-space-before-tab
 skills-releases/**/*.md text eol=lf
 skills-releases/**/*.json text eol=lf
 skills-releases/**/*.sh text eol=lf
+
+# SDK public input proofs compare checkout bytes with committed blobs.
+packages/shared/src/** text eol=lf
+packages/plugins/sdk/src/** text eol=lf
+package.json text eol=lf
+packages/plugins/sdk/package.json text eol=lf
+packages/plugins/sdk/tsconfig.json text eol=lf
+packages/shared/package.json text eol=lf
+packages/shared/tsconfig.json text eol=lf
+pnpm-lock.yaml text eol=lf
+scripts/ensure-plugin-build-deps.mjs text eol=lf
+tsconfig.base.json text eol=lf
+tsconfig.json text eol=lf
+tests/runner-e2e/source-sdk-public-inputs.json text eol=lf
