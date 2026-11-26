@@ -6,6 +6,7 @@ import { useSidebar } from "../context/SidebarContext";
 export interface PageTabItem {
   value: string;
   label: ReactNode;
+  href?: string;
 }
 
 interface PageTabBarProps {

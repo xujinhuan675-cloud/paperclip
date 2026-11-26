@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ToggleGroup } from "radix-ui";
+import { Link } from "@/lib/router";
 import { TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +8,7 @@ export type TabSize = "compact" | "standard";
 export interface TabBarItem<T extends string = string> {
   value: T;
   label: ReactNode;
+  href?: string;
   disabled?: boolean;
 }
 interface TabBarProps {
@@ -19,7 +21,7 @@ interface TabBarProps {
 /** Canonical content tabs. Compose inside Tabs with matching TabsContent panels. */
 export function TabBar({ items, size = "standard", label, className }: TabBarProps) {
   return <TabsList variant="line" data-canonical-tabs={size} aria-label={label} className={cn("canonical-tab-list", className)}>
-    {items.map(item => <TabsTrigger key={item.value} value={item.value} disabled={item.disabled} className="canonical-tab">{item.label}</TabsTrigger>)}
+    {items.map(item => <TabsTrigger key={item.value} value={item.value} disabled={item.disabled} className="canonical-tab" asChild={Boolean(item.href)}>{item.href ? <Link to={item.href}>{item.label}</Link> : item.label}</TabsTrigger>)}
   </TabsList>;
 }
 

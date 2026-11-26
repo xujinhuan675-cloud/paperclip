@@ -2787,7 +2787,9 @@ function StreamlinedInbox({
         streamlined={streamlinedUiEnabled}
         ariaLabel={`${surfaceLabel} controls`}
         context={toolbarContext ?? (
-          <Tabs value={tab} onValueChange={(value) => navigate(`/inbox/${value}`)}>
+          <Tabs value={tab} onValueChange={(value) => {
+            navigate(value === "decision-center" ? "/decision-center" : `/inbox/${value}`);
+          }}>
             <PageTabBar
               items={[
                 { value: "mine", label: "Mine" },
@@ -2795,6 +2797,7 @@ function StreamlinedInbox({
                 { value: "unread", label: "Unread" },
                 { value: "blocked", label: "Blocked" },
                 { value: "all", label: "All" },
+                { value: "decision-center", label: "My approvals", href: "/decision-center" },
               ]}
             />
           </Tabs>
