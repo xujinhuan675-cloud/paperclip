@@ -41,16 +41,16 @@ function stageBody(source: string, stageName: string): string {
   return source.slice(start, end);
 }
 
-it("keeps per-build runtime metadata out of the weekly CLI-install cache", () => {
+it("installs pinned CLI tools from their independent lockfile", () => {
   const production = stageBody(dockerfile, "production");
-  const tools = production.search(/^RUN echo "cli-tools-epoch:/m);
+  const tools = production.search(/^RUN --mount=type=cache,target=\/root\/\.npm,sharing=locked/m);
   const entrypoint = production.search(/^RUN chmod \+x \/usr\/local\/bin\/docker-entrypoint\.sh/m);
   const runtime = production.search(/^ENV NODE_ENV=production/m);
-  const epoch = production.search(/^ARG CLI_TOOLS_CACHE_EPOCH\b/m);
   expect(tools).toBeGreaterThanOrEqual(0);
   expect(entrypoint).toBeGreaterThan(tools);
-  expect(epoch).toBeGreaterThanOrEqual(0);
-  expect(epoch).toBeLessThan(tools);
+  expect(production).toContain("COPY docker/cli-tools/package.json docker/cli-tools/package-lock.json /opt/paperclip-cli-tools/");
+  expect(production).toContain("npm ci --prefix /opt/paperclip-cli-tools --omit=dev --no-audit --no-fund");
+  expect(dockerfile).not.toContain("CLI_TOOLS_CACHE_EPOCH");
   for (const name of ["PAPERCLIP_BUILD_VERSION", "PAPERCLIP_BUILD_COMMIT"]) {
     const declarations = [...production.matchAll(new RegExp(`^ARG ${name}\\b`, "gm"))];
     expect(declarations).toHaveLength(1);
