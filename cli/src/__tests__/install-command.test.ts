@@ -129,6 +129,8 @@ describe("managed install commands", () => {
         fs.mkdirSync(path.join(checkout, "cli"), { recursive: true });
         fs.writeFileSync(path.join(checkout, "cli", "package.json"), JSON.stringify({ version: "0.3.1" }));
         fs.mkdirSync(path.join(checkout, "scripts"), { recursive: true });
+        fs.mkdirSync(path.join(checkout, "skills", "paperclip"), { recursive: true });
+        fs.writeFileSync(path.join(checkout, "skills", "paperclip", "SKILL.md"), "# Paperclip\n");
         fs.writeFileSync(path.join(checkout, "scripts", "release-package-manifest.json"), JSON.stringify(packages.map(({ dir, name }) => ({ dir, name }))));
         for (const workspacePackage of packages) {
           fs.mkdirSync(path.join(checkout, workspacePackage.dir), { recursive: true });
@@ -165,6 +167,7 @@ describe("managed install commands", () => {
         const metadata = JSON.parse(fs.readFileSync(path.join(args[1], "package.json"), "utf8"));
         if (metadata.name === "@paperclipai/server") {
           expect(fs.existsSync(path.join(args[1], "ui-dist", "index.html"))).toBe(true);
+          expect(fs.readFileSync(path.join(args[1], "skills", "paperclip", "SKILL.md"), "utf8")).toBe("# Paperclip\n");
         }
         fs.mkdirSync(args[2], { recursive: true });
         fs.writeFileSync(path.join(args[2], "package.json"), JSON.stringify(metadata));
