@@ -122,16 +122,19 @@ describe("managed install commands", () => {
       if (file === "tar") {
         const checkout = args[args.indexOf("-C") + 1];
         const packages = [
-          { dir: "packages/shared", name: "@paperclipai/shared", packageJson: { name: "@paperclipai/shared", version: "0.3.1" } },
+          { dir: "packages/shared", name: "@paperclipai/shared", packageJson: { name: "@paperclipai/shared", version: "1.0.0" } },
           { dir: "packages/db", name: "@paperclipai/db", packageJson: { name: "@paperclipai/db", version: "0.3.1", dependencies: { "@paperclipai/shared": "workspace:*" }, bundleDependencies: ["embedded-postgres"] } },
           { dir: "server", name: "@paperclipai/server", packageJson: { name: "@paperclipai/server", version: "0.3.1", dependencies: { "@paperclipai/db": "workspace:*" }, bundleDependencies: ["@github/copilot"] } },
         ];
         fs.mkdirSync(path.join(checkout, "cli"), { recursive: true });
-        fs.writeFileSync(path.join(checkout, "cli", "package.json"), JSON.stringify({ version: "0.3.1" }));
+        fs.writeFileSync(path.join(checkout, "cli", "package.json"), JSON.stringify({ name: "paperclipai", version: "0.3.1" }));
+        fs.mkdirSync(path.join(checkout, "cli", "src"), { recursive: true });
+        fs.writeFileSync(path.join(checkout, "cli", "src", "index.ts"), "program.version(cliVersion);\n");
         fs.mkdirSync(path.join(checkout, "scripts"), { recursive: true });
+        fs.copyFileSync(path.resolve(import.meta.dirname, "../../../scripts/release-package-map.mjs"), path.join(checkout, "scripts", "release-package-map.mjs"));
         fs.mkdirSync(path.join(checkout, "skills", "paperclip"), { recursive: true });
         fs.writeFileSync(path.join(checkout, "skills", "paperclip", "SKILL.md"), "# Paperclip\n");
-        fs.writeFileSync(path.join(checkout, "scripts", "release-package-manifest.json"), JSON.stringify(packages.map(({ dir, name }) => ({ dir, name }))));
+        fs.writeFileSync(path.join(checkout, "scripts", "release-package-manifest.json"), JSON.stringify([...packages.map(({ dir, name }) => ({ dir, name, publishFromCi: true })), { dir: "cli", name: "paperclipai", publishFromCi: true }]));
         for (const workspacePackage of packages) {
           fs.mkdirSync(path.join(checkout, workspacePackage.dir), { recursive: true });
           fs.writeFileSync(path.join(checkout, workspacePackage.dir, "package.json"), JSON.stringify(workspacePackage.packageJson));
@@ -165,6 +168,11 @@ describe("managed install commands", () => {
       if (file === "npm" && args[0] === "install") { const prefix = args[args.indexOf("--prefix") + 1]; const packageRoot = path.join(prefix, "node_modules", "paperclipai"); fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true }); fs.writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify({ version: "0.3.1" })); fs.writeFileSync(path.join(packageRoot, "dist", "index.js"), "#!/usr/bin/env node\n"); return { stdout: "", stderr: "" }; }
       if (file === process.execPath && args[0]?.endsWith("prepare-bundled-package.mjs")) {
         const metadata = JSON.parse(fs.readFileSync(path.join(args[1], "package.json"), "utf8"));
+        if (metadata.name === "@paperclipai/db") {
+          expect(metadata.dependencies["@paperclipai/shared"]).toBe("0.3.1");
+          const shared = JSON.parse(fs.readFileSync(path.join(String(_options?.cwd), "packages", "shared", "package.json"), "utf8"));
+          expect(shared.version).toBe("0.3.1");
+        }
         if (metadata.name === "@paperclipai/server") {
           expect(fs.existsSync(path.join(args[1], "ui-dist", "index.html"))).toBe(true);
           expect(fs.readFileSync(path.join(args[1], "skills", "paperclip", "SKILL.md"), "utf8")).toBe("# Paperclip\n");
@@ -173,6 +181,7 @@ describe("managed install commands", () => {
         fs.writeFileSync(path.join(args[2], "package.json"), JSON.stringify(metadata));
         return { stdout: "", stderr: "" };
       }
+      if (file === process.execPath && args[0]?.endsWith("release-package-map.mjs")) return runCommandWithDiagnostics(file, args, _options);
       if (file === process.execPath) return { stdout: "0.3.1\n", stderr: "" };
       throw new Error(`Unexpected command: ${file} ${args.join(" ")}`);
     });
@@ -203,8 +212,9 @@ describe("managed install commands", () => {
       file === "bash" ||
       file === "corepack" ||
       (file === "npm" && args[0] === "pack") ||
+      (file === process.execPath && args[0]?.endsWith("release-package-map.mjs")) ||
       (file === process.execPath && args[0]?.endsWith("prepare-bundled-package.mjs")));
-    expect(buildCalls).toHaveLength(11);
+    expect(buildCalls).toHaveLength(12);
     for (const call of buildCalls) {
       const env = call[2]?.env;
       expect(env, `${call[0]} ${call[1].join(" ")} must run with an explicit env`).toBeDefined();
