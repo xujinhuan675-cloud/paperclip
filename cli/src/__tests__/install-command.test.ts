@@ -214,6 +214,28 @@ describe("managed install commands", () => {
     expect(uiPackCall).toBeDefined();
   });
 
+  it("packs staged server output without rerunning workspace build scripts", async () => {
+    const sha = "e".repeat(40);
+    const checkoutRunner = createGitCheckoutRunCommand(sha);
+    let packedServer = false;
+    const runCommand: CommandRunner = async (file, args, options) => {
+      if (file === "npm" && args[0] === "pack" && args[1]?.includes("workspace-package-")) {
+        const manifestPath = path.join(args[1], "package.json");
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        if (manifest.name === "@paperclipai/server") {
+          manifest.scripts = { prepack: "node -e \"throw new Error('staged output must not rebuild the workspace')\"" };
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+          const result = await runCommandWithDiagnostics(file, args, options);
+          packedServer = true;
+          return result;
+        }
+      }
+      return checkoutRunner(file, args, options);
+    };
+    await expect(installGitPayload("paperclipai/paperclip", sha, runCommand, resolveInstallStorePaths())).resolves.toMatchObject({ reused: false });
+    expect(packedServer).toBe(true);
+  });
+
   it("resolves the complete server workspace dependency closure in dependency order", () => {
     const checkout = path.join(root, "checkout");
     const packages = [
